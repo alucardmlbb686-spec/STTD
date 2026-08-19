@@ -201,13 +201,16 @@ document.addEventListener('partials:loaded', () => {
   document.getElementById('acceptConfirm').addEventListener('click', async function(){
     const btn = this;
     SC.setLoading(btn, true);
-    setTimeout(async () => {
+    try {
       await SCStore.update(pendingId, { status: 'accepted' });
-      SC.setLoading(btn, false);
       acceptModal.classList.remove('show');
       SC.toast(`${pendingId} accepted — recipient will be notified.`, 'success');
-      refresh();
-    }, 900);
+      await refresh();
+    } catch (error) {
+      SC.toast(error.message, 'error');
+    } finally {
+      SC.setLoading(btn, false);
+    }
   });
 
   const proofModal = document.getElementById('proofModal');
@@ -216,12 +219,15 @@ document.addEventListener('partials:loaded', () => {
     const details = document.getElementById('proofDetails').value.trim();
     if (!details){ SC.toast('Add payment proof details first.', 'error'); return; }
     SC.setLoading(this, true);
-    setTimeout(async () => {
+    try {
       await SCStore.update(pendingId, { proof: { details } });
-      SC.setLoading(this, false);
       proofModal.classList.remove('show');
       SC.toast(`${pendingId} is awaiting requester confirmation.`, 'success');
-      refresh();
-    }, 700);
+      await refresh();
+    } catch (error) {
+      SC.toast(error.message, 'error');
+    } finally {
+      SC.setLoading(this, false);
+    }
   });
 });
