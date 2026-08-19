@@ -11,7 +11,7 @@ const SCStore = (() => {
   const NAMES = ['Amara Okafor','Liam Chen','Priya Nair','Sofia Rossi','Kenji Watanabe','Elena Petrova','Marcus Webb','Fatima Al-Sayed','Noah Kim','Isabella Cruz'];
 
   function seedRequests(){
-    const methods = ['bank','paypal','card','crypto','mobile','wire'];
+    const methods = ['venmo','cashapp','paypal','bank','mobile','crypto'];
     const statuses = ['open','open','open','pending','accepted','completed','completed','cancelled'];
     const list = [];
     for (let i = 0; i < 18; i++){

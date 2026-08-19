@@ -138,7 +138,10 @@ document.addEventListener('partials:loaded', () => {
     let valid = true;
 
     if (!amountEl.value || parseFloat(amountEl.value) <= 0){ setError('fAmount', true); valid = false; } else setError('fAmount', false);
-    const recipientOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.value) || /^[+\d][\d\s-]{6,}$/.test(recipient.value);
+    const recipientValue = recipient.value.trim();
+    const recipientOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientValue)
+      || /^[+\d][\d\s-]{6,}$/.test(recipientValue)
+      || (['venmo', 'cashapp', 'paypal'].includes(selectedMethod) && /^[A-Za-z0-9_.$@+-]{2,}$/.test(recipientValue));
     if (!recipientOk){ setError('fRecipient', true); valid = false; } else setError('fRecipient', false);
     if (selectedMethod === 'crypto' && !cryptoMarket.value){ setError('fCryptoMarket', true); valid = false; }
     else setError('fCryptoMarket', false);
@@ -153,13 +156,13 @@ document.addEventListener('partials:loaded', () => {
       const req = {
         id: SC.uid('REQ'),
         requester: 'You',
-        recipient: recipient.value,
+        recipient: recipientValue,
         method: selectedMethod,
         cryptoMarket: selectedMethod === 'crypto' ? cryptoMarket.value : null,
         amount,
         reward,
         total: Math.round((amount + reward) * 100) / 100,
-        status: 'open',
+        status: 'available',
         createdAt: new Date().toISOString(),
         note: document.getElementById('note').value || 'No additional note provided.',
         mine: true,
@@ -167,7 +170,7 @@ document.addEventListener('partials:loaded', () => {
       SCStore.add(req);
       SC.setLoading(btn, false);
 
-      document.getElementById('successSub').textContent = `${req.id} for ${SC.fmtMoney(req.total)} is now live to the network.`;
+      document.getElementById('successSub').textContent = `${req.id} funded with ${SC.fmtMoney(req.total)} and now available in Browse Requests.`;
       document.getElementById('successModal').classList.add('show');
     }, 900);
   });

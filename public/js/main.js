@@ -8,12 +8,12 @@
 const SC = (() => {
 
   const PAYMENT_METHODS = [
-    { id: 'bank',    label: 'Bank transfer',  sub: 'ACH · Wire',        icon: 'bank' },
-    { id: 'paypal',  label: 'PayPal',          sub: 'Instant',           icon: 'paypal' },
-    { id: 'card',    label: 'Debit / Credit',  sub: 'Visa · Mastercard', icon: 'card' },
-    { id: 'crypto',  label: 'Crypto',          sub: 'USDC · BTC · ETH',  icon: 'crypto' },
-    { id: 'mobile',  label: 'Mobile money',    sub: 'Wallet transfer',   icon: 'mobile' },
-    { id: 'wire',    label: 'Int\'l wire',     sub: 'SWIFT',             icon: 'wire' },
+    { id: 'venmo',   label: 'Venmo',            sub: 'Username · Phone',  icon: 'venmo' },
+    { id: 'cashapp', label: 'Cash App',         sub: '$Cashtag · Phone',  icon: 'cashapp' },
+    { id: 'paypal',  label: 'PayPal',           sub: 'Email · Username',  icon: 'paypal' },
+    { id: 'bank',    label: 'Bank transfer',    sub: 'ACH · Wire',        icon: 'bank' },
+    { id: 'mobile',  label: 'Mobile money',     sub: 'Wallet transfer',   icon: 'mobile' },
+    { id: 'crypto',  label: 'Crypto',           sub: 'BTC · ETH · USDC',  icon: 'crypto' },
   ];
 
   function fmtMoney(n, currency = 'USD'){
@@ -36,7 +36,10 @@ const SC = (() => {
   }
 
   function methodMeta(id){
-    return PAYMENT_METHODS.find(m => m.id === id) || PAYMENT_METHODS[0];
+    return PAYMENT_METHODS.find(m => m.id === id) || {
+      card: { id: 'card', label: 'Debit / Credit', sub: 'Visa · Mastercard', icon: 'card' },
+      wire: { id: 'wire', label: 'International wire', sub: 'SWIFT', icon: 'wire' },
+    }[id] || PAYMENT_METHODS[0];
   }
 
   const ICONS = {
@@ -48,6 +51,8 @@ const SC = (() => {
     wire: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 12h16M4 12l4-4M4 12l4 4M20 12l-4-4M20 12l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
   const PAYMENT_BADGES = {
+    venmo: 'https://cdn.simpleicons.org/venmo',
+    cashapp: 'https://cdn.simpleicons.org/cashapp',
     bank: '/assets/icons8-bank-building-40.png',
     crypto: '/assets/icons8-crypto-48.png',
     paypal: '/assets/icons8-paypal-32.png',
@@ -61,9 +66,15 @@ const SC = (() => {
   function statusBadge(status){
     const map = {
       open:      { cls: 'badge-open',      label: 'Open' },
+      draft:     { cls: 'badge-pending',   label: 'Draft' },
+      awaiting_funding: { cls: 'badge-pending', label: 'Awaiting funding' },
+      available: { cls: 'badge-open',      label: 'Available' },
       pending:   { cls: 'badge-pending',   label: 'Pending' },
       accepted:  { cls: 'badge-accepted',  label: 'Accepted' },
+      payment_sent: { cls: 'badge-accepted', label: 'Payment sent' },
+      verification: { cls: 'badge-pending', label: 'Verification' },
       completed: { cls: 'badge-completed', label: 'Completed' },
+      disputed:  { cls: 'badge-failed',    label: 'Disputed' },
       cancelled: { cls: 'badge-cancelled', label: 'Cancelled' },
       failed:    { cls: 'badge-failed',    label: 'Failed' },
     };

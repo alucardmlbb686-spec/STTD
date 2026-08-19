@@ -54,7 +54,7 @@ document.addEventListener('partials:loaded', () => {
     if (q) data = data.filter(r => r.id.toLowerCase().includes(q) || r.requester.toLowerCase().includes(q));
     if (method) data = data.filter(r => r.method === method);
     if (status) data = data.filter(r => r.status === status);
-    else data = data.filter(r => r.status !== 'cancelled');
+    else data = data.filter(r => ['available', 'open', 'pending', 'accepted', 'completed'].includes(r.status));
 
     if (sort === 'reward') data.sort((a,b) => b.reward - a.reward);
     else if (sort === 'amount') data.sort((a,b) => b.amount - a.amount);
@@ -104,7 +104,8 @@ document.addEventListener('partials:loaded', () => {
 
   function cardHtml(r){
     const meta = SC.methodMeta(r.method);
-    const canAccept = r.status === 'open';
+    const canAccept = ['available', 'open'].includes(r.status);
+    const recipient = maskRecipient(r.recipient);
     return `
       <div class="card card-hover request-card">
         <div class="rc-top">
@@ -114,14 +115,15 @@ document.addEventListener('partials:loaded', () => {
           </div>
           ${SC.statusBadge(r.status)}
         </div>
+        <div class="request-card-title">Send ${SC.fmtMoney(r.amount)} via ${meta.label}</div>
+        <div class="request-card-recipient">Recipient: <span>${recipient}</span></div>
         <div class="rc-amounts">
-          <div class="rc-amt-block"><div class="a-label">Amount</div><div class="a-value">${SC.fmtMoney(r.amount)}</div></div>
-          <div class="rc-amt-block reward"><div class="a-label">Reward</div><div class="a-value">+${SC.fmtMoney(r.reward)}</div></div>
+          <div class="rc-amt-block reward"><div class="a-label">Earn</div><div class="a-value">${SC.fmtMoney(r.reward)} reward</div></div>
         </div>
         <div class="rc-foot">
           <div><div class="rc-id">${r.id}</div><div class="cell-muted">${r.requester} · ${SC.timeAgo(r.createdAt)}</div></div>
           <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm accept-btn" data-id="${r.id}" ${canAccept ? '' : 'disabled'}>
-            ${canAccept ? 'Accept request' : statusLabel(r.status)}
+            ${canAccept ? 'Accept Request' : statusLabel(r.status)}
           </button>
         </div>
       </div>
@@ -130,7 +132,7 @@ document.addEventListener('partials:loaded', () => {
 
   function rowHtml(r){
     const meta = SC.methodMeta(r.method);
-    const canAccept = r.status === 'open';
+    const canAccept = ['available', 'open'].includes(r.status);
     return `
       <tr>
         <td class="cell-primary">${r.id}<div class="cell-muted">${r.requester}</div></td>
@@ -142,7 +144,7 @@ document.addEventListener('partials:loaded', () => {
         <td>
           <div class="table-actions">
             <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm accept-btn" data-id="${r.id}" ${canAccept ? '' : 'disabled'}>
-              ${canAccept ? 'Accept' : statusLabel(r.status)}
+              ${canAccept ? 'Accept Request' : statusLabel(r.status)}
             </button>
           </div>
         </td>
@@ -151,7 +153,14 @@ document.addEventListener('partials:loaded', () => {
   }
 
   function statusLabel(status){
-    return { pending: 'Pending', accepted: 'Accepted', completed: 'Completed', cancelled: 'Cancelled' }[status] || 'Closed';
+    return { draft: 'Draft', awaiting_funding: 'Awaiting funding', available: 'Available', pending: 'Pending', accepted: 'Accepted', payment_sent: 'Payment sent', verification: 'Verification', completed: 'Completed', disputed: 'Disputed', cancelled: 'Cancelled' }[status] || 'Closed';
+  }
+
+  function maskRecipient(value){
+    if (!value) return 'Hidden';
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return `${value.slice(0, 2)}***${value.slice(value.indexOf('@'))}`;
+    if (value.length <= 4) return `${value.slice(0, 1)}***`;
+    return `${value.slice(0, 2)}***${value.slice(-2)}`;
   }
 
   // ---- Accept flow ----

@@ -39,10 +39,14 @@
         <div class="select-wrap">
           <select class="input filter-select" id="statusFilter">
             <option value="">All statuses</option>
-            <option value="open">Open</option>
+            <option value="available">Available</option>
+            <option value="awaiting_funding">Awaiting funding</option>
             <option value="pending">Pending</option>
             <option value="accepted">Accepted</option>
+            <option value="payment_sent">Payment sent</option>
+            <option value="verification">Verification</option>
             <option value="completed">Completed</option>
+            <option value="disputed">Disputed</option>
           </select>
         </div>
         <div class="select-wrap">
@@ -63,7 +67,7 @@
       <div id="tableView" class="table-wrap" style="display:none;">
         <table class="data-table">
           <thead>
-            <tr><th>Request</th><th>Method</th><th>Amount</th><th>Reward</th><th>Status</th><th>Posted</th><th></th></tr>
+            <tr><th>Request</th><th>Method</th><th>Amount needed</th><th>Reward</th><th>Status</th><th>Posted</th><th></th></tr>
           </thead>
           <tbody id="tableBody"></tbody>
         </table>
