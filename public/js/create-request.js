@@ -22,8 +22,59 @@ document.addEventListener('partials:loaded', () => {
   ];
   const cryptoMarketCard = document.getElementById('cryptoMarketCard');
   const cryptoMarket = document.getElementById('cryptoMarket');
+  const cryptoMarketGrid = document.getElementById('cryptoMarketGrid');
+  const cryptoSymbols = {
+    'Aave (AAVE)': 'aave', 'Algorand (ALGO)': 'algo', 'Aptos (APT)': 'apt', 'Arbitrum (ARB)': 'arb', 'Avalanche (AVAX)': 'avax',
+    'BNB (BNB)': 'bnb', 'Bitcoin (BTC)': 'btc', 'Bitcoin Cash (BCH)': 'bch', 'Cardano (ADA)': 'ada', 'Chainlink (LINK)': 'link',
+    'Cosmos (ATOM)': 'atom', 'Dai (DAI)': 'dai', 'Dogecoin (DOGE)': 'doge', 'Ethereum (ETH)': 'eth', 'Fantom (FTM)': 'ftm',
+    'Filecoin (FIL)': 'fil', 'Hedera (HBAR)': 'hbar', 'Internet Computer (ICP)': 'icp', 'Kaspa (KAS)': 'kas', 'Litecoin (LTC)': 'ltc',
+    'Monero (XMR)': 'xmr', 'Near Protocol (NEAR)': 'near', 'Optimism (OP)': 'op', 'Pepe (PEPE)': 'pepe', 'Polkadot (DOT)': 'dot',
+    'Polygon (POL)': 'pol', 'Ripple (XRP)': 'xrp', 'Render (RENDER)': 'rnd', 'Shiba Inu (SHIB)': 'shib', 'Solana (SOL)': 'sol',
+    'Stellar (XLM)': 'xlm', 'Sui (SUI)': 'sui', 'Toncoin (TON)': 'ton', 'TRON (TRX)': 'trx', 'Uniswap (UNI)': 'uni',
+    'USD Coin (USDC)': 'usdc', 'Tether (USDT)': 'usdt', 'VeChain (VET)': 'vet', 'Worldcoin (WLD)': 'wld', 'XDC Network (XDC)': 'xdc',
+    'Zcash (ZEC)': 'zec'
+  };
+  const cryptoBadgeOverrides = {
+    'Aptos (APT)': 'https://coin-images.coingecko.com/coins/images/26455/large/Aptos-Network-Symbol-Black-RGB-1x.png',
+    'Arbitrum (ARB)': 'https://coin-images.coingecko.com/coins/images/16547/large/arb.jpg',
+    'Fantom (FTM)': 'https://coin-images.coingecko.com/coins/images/4001/large/Fantom_round.png',
+    'Hedera (HBAR)': 'https://coin-images.coingecko.com/coins/images/3688/large/hbar.png',
+    'Kaspa (KAS)': 'https://coin-images.coingecko.com/coins/images/25751/large/kaspa-icon-exchanges.png',
+    'Near Protocol (NEAR)': 'https://coin-images.coingecko.com/coins/images/10365/large/near.jpg',
+    'Optimism (OP)': 'https://coin-images.coingecko.com/coins/images/25244/large/Token.png',
+    'Pepe (PEPE)': 'https://coin-images.coingecko.com/coins/images/29850/large/pepe-token.jpeg',
+    'Polygon (POL)': 'https://coin-images.coingecko.com/coins/images/32440/large/pol.png',
+    'Render (RENDER)': 'https://coin-images.coingecko.com/coins/images/11636/large/rndr.png',
+    'Shiba Inu (SHIB)': 'https://coin-images.coingecko.com/coins/images/11939/large/shiba.png',
+    'Sui (SUI)': 'https://coin-images.coingecko.com/coins/images/26375/large/sui-ocean-square.png',
+    'Toncoin (TON)': 'https://cdn.simpleicons.org/ton',
+    'Worldcoin (WLD)': 'https://coin-images.coingecko.com/coins/images/31069/large/worldcoin.jpeg',
+    'XDC Network (XDC)': 'https://coin-images.coingecko.com/coins/images/2912/large/xdc-icon.png'
+  };
   cryptoMarket.innerHTML += cryptoMarkets.map(market => `<option value="${market}">${market}</option>`).join('');
-  cryptoMarket.addEventListener('change', updateSummary);
+  cryptoMarketGrid.innerHTML = cryptoMarkets.map(market => {
+    const symbol = cryptoSymbols[market];
+    const badgeUrl = cryptoBadgeOverrides[market] || `https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@master/128/color/${symbol}.png`;
+    return `<button class="crypto-market-option" type="button" data-market="${market}" role="option" aria-selected="false">
+      <img src="${badgeUrl}" alt="${market} badge" loading="lazy">
+      <span>${market}</span>
+    </button>`;
+  }).join('');
+
+  function selectCryptoMarket(market){
+    cryptoMarket.value = market;
+    SC.qsa('.crypto-market-option', cryptoMarketGrid).forEach(option => {
+      const selected = option.dataset.market === market;
+      option.classList.toggle('selected', selected);
+      option.setAttribute('aria-selected', selected);
+    });
+    updateSummary();
+  }
+  cryptoMarketGrid.addEventListener('click', event => {
+    const option = event.target.closest('.crypto-market-option');
+    if (option) selectCryptoMarket(option.dataset.market);
+  });
+  cryptoMarket.addEventListener('change', () => selectCryptoMarket(cryptoMarket.value));
 
   grid.innerHTML = SC.PAYMENT_METHODS.map(m => `
     <div class="method-option ${m.id === selectedMethod ? 'selected' : ''}" data-method="${m.id}" role="button" tabindex="0">
@@ -37,7 +88,7 @@ document.addEventListener('partials:loaded', () => {
     SC.qsa('.method-option', grid).forEach(el => el.classList.toggle('selected', el.dataset.method === id));
     cryptoMarketCard.hidden = id !== 'crypto';
     if (id !== 'crypto') {
-      cryptoMarket.value = '';
+      selectCryptoMarket('');
       setError('fCryptoMarket', false);
     }
     updateSummary();

@@ -65,8 +65,9 @@
             <fieldset>
               <legend>Crypto market</legend>
               <div class="field" id="fCryptoMarket" style="margin-bottom:0;">
-                <label for="cryptoMarket">Choose a cryptocurrency</label>
-                <select class="input" id="cryptoMarket">
+                <label>Choose a cryptocurrency</label>
+                <div class="crypto-market-grid" id="cryptoMarketGrid" role="listbox" aria-label="Choose a cryptocurrency"></div>
+                <select class="input crypto-market-value" id="cryptoMarket" aria-hidden="true" tabindex="-1">
                   <option value="">Select a market</option>
                 </select>
                 <div class="error-msg">Choose a cryptocurrency market.</div>
