@@ -23,7 +23,7 @@ document.addEventListener('partials:loaded', () => {
 
   setTimeout(() => { init(); }, 500);
 
-  function init(){
+  async function init(){
     document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; refresh(); });
     methodFilter.addEventListener('change', () => { currentPage = 1; refresh(); });
     document.getElementById('statusFilter').addEventListener('change', () => { currentPage = 1; refresh(); });
@@ -41,16 +41,16 @@ document.addEventListener('partials:loaded', () => {
       document.getElementById('tableView').style.display = mode === 'table' ? 'block' : 'none';
     }
 
-    refresh();
+    await refresh();
   }
 
-  function getFiltered(){
+  async function getFiltered(){
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     const method = methodFilter.value;
     const status = document.getElementById('statusFilter').value;
     const sort = document.getElementById('sortFilter').value;
 
-    let data = SCStore.getAll();
+    let data = await SCStore.getAll();
     if (q) data = data.filter(r => r.id.toLowerCase().includes(q) || r.requester.toLowerCase().includes(q));
     if (method) data = data.filter(r => r.method === method);
     if (status) data = data.filter(r => r.status === status);
@@ -63,8 +63,9 @@ document.addEventListener('partials:loaded', () => {
     return data;
   }
 
-  function refresh(){
+  async function refresh(){
     currentData = getFiltered();
+    currentData = await currentData;
     resultCount.textContent = currentData.length;
     renderPage();
   }
@@ -178,9 +179,9 @@ document.addEventListener('partials:loaded', () => {
     }));
     SC.qsa('.accept-btn').forEach(btn => {
       if (btn.disabled) return;
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         pendingId = btn.dataset.id;
-        const r = SCStore.getAll().find(x => x.id === pendingId);
+        const r = (await SCStore.getAll()).find(x => x.id === pendingId);
         document.getElementById('acceptModalSub').textContent = `You're about to accept ${r.id} from ${r.requester}. You'll send funds via ${SC.methodMeta(r.method).label}.`;
         document.getElementById('acceptModalDetails').innerHTML = `
           <div class="kv-row"><span class="k">Amount to send</span><span class="v">${SC.fmtMoney(r.amount)}</span></div>
@@ -196,11 +197,11 @@ document.addEventListener('partials:loaded', () => {
   document.getElementById('acceptCancel').addEventListener('click', () => acceptModal.classList.remove('show'));
   acceptModal.addEventListener('click', (e) => { if (e.target === acceptModal) acceptModal.classList.remove('show'); });
 
-  document.getElementById('acceptConfirm').addEventListener('click', function(){
+  document.getElementById('acceptConfirm').addEventListener('click', async function(){
     const btn = this;
     SC.setLoading(btn, true);
-    setTimeout(() => {
-      SCStore.update(pendingId, { status: 'accepted', fulfiller: SCStore.getUser().name, acceptedAt: new Date().toISOString() });
+    setTimeout(async () => {
+      await SCStore.update(pendingId, { status: 'accepted' });
       SC.setLoading(btn, false);
       acceptModal.classList.remove('show');
       SC.toast(`${pendingId} accepted — recipient will be notified.`, 'success');
@@ -210,12 +211,12 @@ document.addEventListener('partials:loaded', () => {
 
   const proofModal = document.getElementById('proofModal');
   document.getElementById('proofCancel').addEventListener('click', () => proofModal.classList.remove('show'));
-  document.getElementById('proofSubmit').addEventListener('click', function(){
+  document.getElementById('proofSubmit').addEventListener('click', async function(){
     const details = document.getElementById('proofDetails').value.trim();
     if (!details){ SC.toast('Add payment proof details first.', 'error'); return; }
     SC.setLoading(this, true);
-    setTimeout(() => {
-      SCStore.update(pendingId, { status: 'awaiting_confirmation', proof: { details, submittedAt: new Date().toISOString() } });
+    setTimeout(async () => {
+      await SCStore.update(pendingId, { proof: { details } });
       SC.setLoading(this, false);
       proofModal.classList.remove('show');
       SC.toast(`${pendingId} is awaiting requester confirmation.`, 'success');

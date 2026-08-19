@@ -18,8 +18,8 @@ document.addEventListener('partials:loaded', () => {
     render();
   });
 
-  function render(){
-    const all = SCStore.getMine().sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  async function render(){
+    const all = (await SCStore.getMine()).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     document.getElementById('cAll').textContent = all.length;
     document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status)).length;
     document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
@@ -58,8 +58,8 @@ document.addEventListener('partials:loaded', () => {
   }
 
   const detailModal = document.getElementById('detailModal');
-  function openDetail(id){
-    const r = SCStore.getAll().find(x => x.id === id);
+  async function openDetail(id){
+    const r = (await SCStore.getMine()).find(x => x.id === id);
     if (!r) return;
     pendingCancelId = id;
     document.getElementById('detailId').textContent = r.id;
@@ -88,25 +88,25 @@ document.addEventListener('partials:loaded', () => {
   document.getElementById('detailClose').addEventListener('click', () => detailModal.classList.remove('show'));
   detailModal.addEventListener('click', (e) => { if (e.target === detailModal) detailModal.classList.remove('show'); });
 
-  document.getElementById('detailCancelReq').addEventListener('click', function(){
+  document.getElementById('detailCancelReq').addEventListener('click', async function(){
     SC.setLoading(this, true);
-    setTimeout(() => {
-      SCStore.updateStatus(pendingCancelId, 'cancelled');
+    try {
+      await SCStore.updateStatus(pendingCancelId, 'cancelled');
       SC.setLoading(this, false);
       detailModal.classList.remove('show');
       SC.toast('Request cancelled.', 'success');
       render();
-    }, 700);
+    } catch (error) { SC.setLoading(this, false); SC.toast(error.message, 'error'); }
   });
 
-  document.getElementById('detailConfirmReq').addEventListener('click', () => {
-    SCStore.update(pendingCancelId, { status: 'under_admin_review', completionConfirmedAt: new Date().toISOString() });
+  document.getElementById('detailConfirmReq').addEventListener('click', async () => {
+    await SCStore.update(pendingCancelId, { status: 'under_admin_review' });
     detailModal.classList.remove('show');
     SC.toast('Completion confirmed. An authorized admin will release escrow.', 'success');
     render();
   });
-  document.getElementById('detailDisputeReq').addEventListener('click', () => {
-    SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: 'Requester reported an issue.', createdAt: new Date().toISOString() } });
+  document.getElementById('detailDisputeReq').addEventListener('click', async () => {
+    await SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: 'Requester reported an issue.' } });
     detailModal.classList.remove('show');
     SC.toast('Issue reported for admin review.', 'success');
     render();

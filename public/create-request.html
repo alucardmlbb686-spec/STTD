@@ -127,10 +127,11 @@
       <svg width="24" height="24" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
       <h3 style="margin-bottom:8px;">Request created</h3>
-    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Confirm the escrow deposit before this request can appear in Browse Requests.</p>
+    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Submit the escrow transaction hash before this request can appear in Browse Requests.</p>
+    <div class="field" style="text-align:left; margin-bottom:18px;"><label for="depositTxHash">Blockchain transaction hash</label><input class="input mono" id="depositTxHash" placeholder="Paste the BTC or USDT transaction hash"></div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-secondary btn-block" id="depositLater">Deposit later</button>
-      <button class="btn btn-primary btn-block" id="confirmDeposit">Confirm deposit</button>
+      <button class="btn btn-primary btn-block" id="confirmDeposit">Submit deposit proof</button>
     </div>
   </div>
 </div>

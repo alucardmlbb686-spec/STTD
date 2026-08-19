@@ -136,7 +136,8 @@ document.addEventListener('partials:loaded', () => {
   }
 
   const form = document.getElementById('createForm');
-  form.addEventListener('submit', (e) => {
+  let createdRequest = null;
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const recipient = document.getElementById('recipient');
     const recipientName = document.getElementById('recipientName');
@@ -156,43 +157,21 @@ document.addEventListener('partials:loaded', () => {
     const btn = document.getElementById('createSubmit');
     SC.setLoading(btn, true);
 
-    setTimeout(() => {
+    try {
       const amount = parseFloat(amountEl.value);
       const reward = parseFloat(rewardEl.value) || 0;
-      const req = {
-        id: SC.uid('REQ'),
-        requester: 'You',
-        recipient: recipientValue,
-        method: selectedMethod,
-        cryptoMarket: selectedMethod === 'crypto' ? cryptoMarket.value : null,
-        amount,
-        reward,
-        fee: Math.round(amount * 0.025 * 100) / 100,
-        total: Math.round((amount + reward + amount * 0.025) * 100) / 100,
-        status: 'awaiting_deposit',
-        depositStatus: 'pending',
-        depositId: null,
-        recipientName: recipientName.value.trim(),
-        reason: document.getElementById('reason').value.trim(),
-        dueAt: document.getElementById('dueAt').value,
-        escrowAsset: document.getElementById('escrowAsset').value,
-        createdAt: new Date().toISOString(),
-        note: document.getElementById('note').value || 'No additional note provided.',
-        mine: true,
-      };
-      SCStore.add(req);
+      createdRequest = await SCStore.add({ method: selectedMethod, recipientName: recipientName.value.trim(), recipient: recipientValue, amount, reward, reason: document.getElementById('reason').value.trim(), dueAt: document.getElementById('dueAt').value, note: document.getElementById('note').value || '', escrowAsset: document.getElementById('escrowAsset').value });
       SC.setLoading(btn, false);
 
-      document.getElementById('successSub').textContent = `${req.id} is Awaiting Deposit. Confirm ${SC.fmtMoney(req.total)} in ${req.escrowAsset} escrow before it becomes Open.`;
+      document.getElementById('successSub').textContent = `${createdRequest.id} is Awaiting Deposit. Submit the ${createdRequest.escrowAsset} transaction hash after sending ${SC.fmtMoney(createdRequest.total)}.`;
       document.getElementById('successModal').classList.add('show');
-    }, 900);
+    } catch (error) { SC.setLoading(btn, false); SC.toast(error.message, 'error'); }
   });
 
   document.getElementById('confirmDeposit').addEventListener('click', () => {
-    const request = SCStore.getMine()[0];
-    if (!request || request.status !== 'awaiting_deposit') return;
-    SCStore.update(request.id, { status: 'open', depositStatus: 'confirmed', depositId: SC.uid('DEP') });
-    window.location.href = '/my-requests.html';
+    const txHash = document.getElementById('depositTxHash').value.trim();
+    if (!createdRequest || !txHash) { SC.toast('Enter the blockchain transaction hash first.', 'error'); return; }
+    SCStore.update(createdRequest.id, { txHash }).then(() => { window.location.href = '/my-requests.html'; }).catch(error => SC.toast(error.message, 'error'));
   });
   document.getElementById('depositLater').addEventListener('click', () => { window.location.href = '/my-requests.html'; });
 });

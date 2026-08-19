@@ -16,14 +16,17 @@ Then open **http://localhost:3000**.
 - **Home** (`/`) — hero, how it works, benefits, supported payment methods.
 - **Login** (`/login`) / **Register** (`/register`) — auth forms with validation, password strength meter, remember me, forgot password.
 - **Dashboard** (`/dashboard`) — overview stats, active/accepted requests, recent activity.
-- **Create request** (`/create-request`) — payment method picker, live summary, mock submit.
+- **Create request** (`/create-request`) — payment method picker, live summary, escrow deposit submission.
 - **Browse requests** (`/browse-requests`) — card + table views, filters, search, sort, accept flow.
 - **My requests** (`/my-requests`) — tabs by status, detail modal, cancel action.
 - **Admin login** (`/admin-login`) / **Admin dashboard** (`/admin-dashboard`) — separate secure-feeling area with its own sidebar, stats, and request table.
 
-## Notes
+## Production setup
 
-- All data is mocked client-side in `public/js/store.js` and persisted to `localStorage` — there's no real backend, database, or payment processing. This is a UI/UX prototype.
+- Data is persisted in PostgreSQL through the API in `server.js`; the browser does not generate or persist users and requests.
+- Copy `.env.example` to your deployment environment and configure `DATABASE_URL`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`. The schema in `schema.sql` is applied on startup.
+- Deposits require a BTC or USDT transaction hash and remain `Deposit Confirming` until an authorized admin confirms the deposit. A blockchain indexer or custody provider should be connected to automate that confirmation before accepting production funds.
+- Set `NODE_ENV=production` to enable secure session cookies. Use HTTPS in production.
 - Shared layout pieces (navbar, footer, sidebar, admin sidebar, topbar) live in `public/partials/` and are injected at runtime via `data-include` attributes — see `public/js/main.js`.
 - Design tokens (colors, type, spacing, radii, shadows) live in `public/css/tokens.css`; component styles are split across `base.css`, `components.css`, `landing.css`, `auth.css`, and `app.css`.
 

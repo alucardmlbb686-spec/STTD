@@ -1,7 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const ADMIN_EMAIL = 'admin@123';
-  const ADMIN_PASSWORD = 'admin123';
-
   // ---- Password visibility toggles ----
   SC.qsa('.password-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -33,24 +30,17 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const email = document.getElementById('email');
       const password = document.getElementById('password');
-      const isAdminLogin = email.value.trim() === ADMIN_EMAIL && password.value === ADMIN_PASSWORD;
       let valid = true;
 
-      if (!isAdminLogin && !isEmail(email.value)){ setError('fEmail', true); valid = false; } else setError('fEmail', false);
+      if (!isEmail(email.value)){ setError('fEmail', true); valid = false; } else setError('fEmail', false);
       if (!password.value){ setError('fPassword', true); valid = false; } else setError('fPassword', false);
       if (!valid) return;
 
       const btn = document.getElementById('loginSubmit');
       SC.setLoading(btn, true);
-      setTimeout(() => {
-        if (isAdminLogin){
-          localStorage.setItem('starcurrency_admin_v1', JSON.stringify({ email: ADMIN_EMAIL, role: 'admin' }));
-          window.location.href = '/admin-dashboard.html';
-          return;
-        }
-        SCStore.setUser({ name: email.value.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g, c => c.toUpperCase()), email: email.value });
-        window.location.href = '/dashboard.html';
-      }, 900);
+      SCStore.api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: email.value.trim(), password: password.value }) })
+        .then(({ user }) => { SCStore.setUser(user); window.location.href = '/dashboard.html'; })
+        .catch(error => { SC.toast(error.message, 'error'); SC.setLoading(btn, false); });
     });
   }
 
@@ -95,10 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const btn = document.getElementById('registerSubmit');
       SC.setLoading(btn, true);
-      setTimeout(() => {
-        SCStore.setUser({ name: name.value.trim(), email: email.value });
-        window.location.href = '/dashboard.html';
-      }, 900);
+      SCStore.api('/api/auth/register', { method: 'POST', body: JSON.stringify({ name: name.value.trim(), email: email.value.trim(), password: password.value }) })
+        .then(({ user }) => { SCStore.setUser(user); window.location.href = '/dashboard.html'; })
+        .catch(error => { SC.toast(error.message, 'error'); SC.setLoading(btn, false); });
     });
   }
 });

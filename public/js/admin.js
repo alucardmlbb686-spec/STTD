@@ -1,7 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const ADMIN_EMAIL = 'admin@123';
-  const ADMIN_PASSWORD = 'admin123';
-
   SC.qsa('.password-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = document.getElementById(btn.getAttribute('data-toggle-for'));
@@ -21,10 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const code = document.getElementById('code');
       let valid = true;
 
-      if (email.value.trim() !== ADMIN_EMAIL){ document.getElementById('fEmail').classList.add('has-error'); valid = false; }
+      if (!email.value.trim()){ document.getElementById('fEmail').classList.add('has-error'); valid = false; }
       else document.getElementById('fEmail').classList.remove('has-error');
 
-      if (password.value !== ADMIN_PASSWORD){ document.getElementById('fPassword').classList.add('has-error'); valid = false; }
+      if (!password.value){ document.getElementById('fPassword').classList.add('has-error'); valid = false; }
       else document.getElementById('fPassword').classList.remove('has-error');
 
       if (code.value.trim() && code.value.trim().length !== 6){ document.getElementById('fCode').classList.add('has-error'); valid = false; }
@@ -34,19 +31,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const btn = document.getElementById('adminLoginSubmit');
       SC.setLoading(btn, true);
-      setTimeout(() => {
-        localStorage.setItem('starcurrency_admin_v1', JSON.stringify({ email: ADMIN_EMAIL }));
-        window.location.href = '/admin-dashboard.html';
-      }, 900);
+      fetch('/api/auth/login', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.value.trim(), password: password.value }) })
+        .then(async response => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || 'Sign in failed'); return payload; })
+        .then(({ user }) => { if (user.role !== 'admin') throw new Error('Admin access required'); window.location.href = '/admin-dashboard.html'; })
+        .catch(error => { SC.toast(error.message, 'error'); SC.setLoading(btn, false); });
     });
   }
 });
 
 // ---- Admin dashboard ----
-document.addEventListener('partials:loaded', () => {
+document.addEventListener('partials:loaded', async () => {
   const statsGrid = document.getElementById('adminStats');
   if (!statsGrid) return; // not the admin dashboard page
-  if (!localStorage.getItem('starcurrency_admin_v1')) {
+  const admin = await SCStore.refreshSession();
+  if (!admin || admin.role !== 'admin') {
     window.location.href = '/admin-login.html';
     return;
   }
@@ -68,7 +66,7 @@ document.addEventListener('partials:loaded', () => {
   });
 
   const signOut = document.querySelector('.sidebar-footer .user-chip');
-  signOut?.addEventListener('click', () => localStorage.removeItem('starcurrency_admin_v1'));
+  signOut?.addEventListener('click', () => SCStore.clearUser());
 
   if (section !== 'overview') {
     renderSection(section);
@@ -81,8 +79,8 @@ document.addEventListener('partials:loaded', () => {
 
   setTimeout(render, 600);
 
-  function render(){
-    const all = SCStore.getAll();
+  async function render(){
+    const all = (await SCStore.api('/api/admin/requests')).requests;
     const openCount = all.filter(r => r.status === 'open').length;
     const volume = all.reduce((s,r) => s + r.amount, 0);
     const completed = all.filter(r => r.status === 'completed').length;
@@ -110,17 +108,11 @@ document.addEventListener('partials:loaded', () => {
       </tr>
     `).join('');
 
-    document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', () => {
-      const request = SCStore.getAll().find(item => item.id === button.dataset.id);
+    document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', async () => {
+      const request = all.find(item => item.id === button.dataset.id);
       if (!request) return;
-      if (request.status === 'under_admin_review') {
-        SCStore.update(request.id, { status: 'completed', releasedAt: new Date().toISOString(), releasedBy: 'admin@123' });
-        SC.toast(`${request.id} escrow released and marked Completed.`, 'success');
-      } else {
-        SCStore.update(request.id, { status: 'under_admin_review', adminReviewStartedAt: new Date().toISOString() });
-        SC.toast(`${request.id} moved to Under Admin Review.`, 'success');
-      }
-      render();
+      try { const result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST' }); SC.toast(`${request.id} updated to ${result.status}.`, 'success'); render(); }
+      catch (error) { SC.toast(error.message, 'error'); }
     }));
 
     const methodCounts = {};
@@ -165,9 +157,9 @@ document.addEventListener('partials:loaded', () => {
     `;
   }
 
-  function renderSection(name){
+  async function renderSection(name){
     const pageBody = document.querySelector('.page-body');
-    const all = SCStore.getAll();
+    const all = (await SCStore.api('/api/admin/requests')).requests;
     const title = {
       users: 'Users',
       requests: 'All requests',

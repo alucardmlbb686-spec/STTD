@@ -46,10 +46,10 @@ document.addEventListener('partials:loaded', () => {
 
   setTimeout(render, 550);
 
-  function render(){
-    const mine = SCStore.getMine();
-    const active = mine.filter(r => ['open','pending'].includes(r.status));
-    const accepted = mine.filter(r => ['accepted','completed'].includes(r.status));
+  async function render(){
+    const mine = await SCStore.getMine();
+    const active = mine.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status));
+    const accepted = mine.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
     const completed = mine.filter(r => r.status === 'completed');
     const totalReward = completed.reduce((s,r) => s + r.reward, 0);
 
@@ -119,12 +119,13 @@ document.addEventListener('partials:loaded', () => {
   function iconStar(){ return '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 2l2.3 5.2 5.6.6-4.2 3.8 1.2 5.6L10 14.2 5.1 17.2l1.2-5.6-4.2-3.8 5.6-.6L10 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>'; }
   function iconCoin(){ return '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.5v7M8 8.3h2.8a1.4 1.4 0 010 2.8H9M8 11.1h2.6a1.5 1.5 0 010 3H8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'; }
 
-  function renderAccountSection(section, user){
+  async function renderAccountSection(section, user){
     const pageBody = document.querySelector('.page-body');
     if (section === 'wallet') {
-      const completed = SCStore.getMine().filter(request => request.status === 'completed');
+      const mine = await SCStore.getMine();
+      const completed = mine.filter(request => request.status === 'completed');
       const rewards = completed.reduce((total, request) => total + request.reward, 0);
-      const pendingRewards = SCStore.getMine().filter(request => ['accepted', 'payment_sent', 'verification'].includes(request.status)).reduce((total, request) => total + request.reward, 0);
+      const pendingRewards = mine.filter(request => ['accepted', 'in_progress', 'awaiting_confirmation', 'under_admin_review'].includes(request.status)).reduce((total, request) => total + request.reward, 0);
       pageBody.innerHTML = `
         <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
         <div class="wallet-balance-card">
@@ -154,10 +155,11 @@ document.addEventListener('partials:loaded', () => {
       const name = document.getElementById('settingsName').value.trim();
       const email = document.getElementById('settingsEmail').value.trim();
       if (!name || !email) return SC.toast('Enter your name and email.', 'error');
-      SCStore.setUser({ name, email });
-      document.getElementById('sidebarUserName').textContent = name;
-      document.getElementById('sidebarAvatar').textContent = SC.initials(name);
-      SC.toast('Settings saved.', 'success');
+      SCStore.updateProfile({ name, email }).then(updatedUser => {
+        document.getElementById('sidebarUserName').textContent = updatedUser.name;
+        document.getElementById('sidebarAvatar').textContent = SC.initials(updatedUser.name);
+        SC.toast('Settings saved.', 'success');
+      }).catch(error => SC.toast(error.message, 'error'));
     });
   }
 });
