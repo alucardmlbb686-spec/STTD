@@ -115,6 +115,7 @@ const SC = (() => {
         console.error('Failed to load partial', name, e);
       }
     }));
+    updateNavbarAuth();
     const protectedPage = ['dashboard', 'browse', 'create', 'my-requests'].includes(document.body.dataset.page);
     if (protectedPage) {
       const loggedIn = typeof SCStore !== 'undefined' && SCStore.isLoggedIn();
@@ -122,6 +123,18 @@ const SC = (() => {
       if (!loggedIn) showLoginRequiredDialog();
     }
     document.dispatchEvent(new CustomEvent('partials:loaded'));
+  }
+
+  function updateNavbarAuth(){
+    const loggedIn = Boolean(localStorage.getItem('starcurrency_user_v1'));
+    ['navLoginLink', 'navRegisterLink', 'mobileNavLoginLink', 'mobileNavRegisterLink'].forEach(id => {
+      const link = document.getElementById(id);
+      if (link) link.hidden = loggedIn;
+    });
+    ['navDashboardLink', 'mobileNavDashboardLink'].forEach(id => {
+      const link = document.getElementById(id);
+      if (link) link.hidden = !loggedIn;
+    });
   }
 
   function showLoginRequiredDialog(){
