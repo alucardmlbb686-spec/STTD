@@ -47,7 +47,16 @@ const SC = (() => {
     mobile: '<svg viewBox="0 0 24 24" fill="none"><rect x="7" y="2.5" width="10" height="19" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M11 18h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     wire: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 12h16M4 12l4-4M4 12l4 4M20 12l-4-4M20 12l-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
-  function methodIcon(id){ return ICONS[id] || ICONS.bank; }
+  const PAYMENT_BADGES = {
+    bank: '/assets/icons8-bank-building-40.png',
+    crypto: '/assets/icons8-crypto-48.png',
+    paypal: '/assets/icons8-paypal-32.png',
+  };
+  function methodIcon(id){
+    return PAYMENT_BADGES[id]
+      ? `<img class="method-icon-image" src="${PAYMENT_BADGES[id]}" alt="${methodMeta(id).label} icon">`
+      : (ICONS[id] || ICONS.bank);
+  }
 
   function statusBadge(status){
     const map = {
