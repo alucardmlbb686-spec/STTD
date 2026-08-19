@@ -9,6 +9,21 @@ document.addEventListener('partials:loaded', () => {
 
   const grid = document.getElementById('methodGrid');
   let selectedMethod = SC.PAYMENT_METHODS[0].id;
+  const cryptoMarkets = [
+    'Aave (AAVE)', 'Algorand (ALGO)', 'Aptos (APT)', 'Arbitrum (ARB)', 'Avalanche (AVAX)',
+    'BNB (BNB)', 'Bitcoin (BTC)', 'Bitcoin Cash (BCH)', 'Cardano (ADA)', 'Chainlink (LINK)',
+    'Cosmos (ATOM)', 'Dai (DAI)', 'Dogecoin (DOGE)', 'Ethereum (ETH)', 'Fantom (FTM)',
+    'Filecoin (FIL)', 'Hedera (HBAR)', 'Internet Computer (ICP)', 'Kaspa (KAS)', 'Litecoin (LTC)',
+    'Monero (XMR)', 'Near Protocol (NEAR)', 'Optimism (OP)', 'Pepe (PEPE)', 'Polkadot (DOT)',
+    'Polygon (POL)', 'Ripple (XRP)', 'Render (RENDER)', 'Shiba Inu (SHIB)', 'Solana (SOL)',
+    'Stellar (XLM)', 'Sui (SUI)', 'Toncoin (TON)', 'TRON (TRX)', 'Uniswap (UNI)',
+    'USD Coin (USDC)', 'Tether (USDT)', 'VeChain (VET)', 'Worldcoin (WLD)', 'XDC Network (XDC)',
+    'Zcash (ZEC)'
+  ];
+  const cryptoMarketCard = document.getElementById('cryptoMarketCard');
+  const cryptoMarket = document.getElementById('cryptoMarket');
+  cryptoMarket.innerHTML += cryptoMarkets.map(market => `<option value="${market}">${market}</option>`).join('');
+  cryptoMarket.addEventListener('change', updateSummary);
 
   grid.innerHTML = SC.PAYMENT_METHODS.map(m => `
     <div class="method-option ${m.id === selectedMethod ? 'selected' : ''}" data-method="${m.id}" role="button" tabindex="0">
@@ -20,6 +35,11 @@ document.addEventListener('partials:loaded', () => {
   function selectMethod(id){
     selectedMethod = id;
     SC.qsa('.method-option', grid).forEach(el => el.classList.toggle('selected', el.dataset.method === id));
+    cryptoMarketCard.hidden = id !== 'crypto';
+    if (id !== 'crypto') {
+      cryptoMarket.value = '';
+      setError('fCryptoMarket', false);
+    }
     updateSummary();
   }
   grid.addEventListener('click', (e) => {
@@ -40,6 +60,8 @@ document.addEventListener('partials:loaded', () => {
     const amount = parseFloat(amountEl.value) || 0;
     const reward = parseFloat(rewardEl.value) || 0;
     document.getElementById('sumMethod').textContent = SC.methodMeta(selectedMethod).label;
+    document.getElementById('sumCryptoRow').hidden = selectedMethod !== 'crypto';
+    document.getElementById('sumCrypto').textContent = cryptoMarket.value || '—';
     document.getElementById('sumAmount').textContent = SC.fmtMoney(amount);
     document.getElementById('sumReward').textContent = SC.fmtMoney(reward);
     document.getElementById('sumTotal').textContent = SC.fmtMoney(amount + reward);
@@ -67,6 +89,8 @@ document.addEventListener('partials:loaded', () => {
     if (!amountEl.value || parseFloat(amountEl.value) <= 0){ setError('fAmount', true); valid = false; } else setError('fAmount', false);
     const recipientOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.value) || /^[+\d][\d\s-]{6,}$/.test(recipient.value);
     if (!recipientOk){ setError('fRecipient', true); valid = false; } else setError('fRecipient', false);
+    if (selectedMethod === 'crypto' && !cryptoMarket.value){ setError('fCryptoMarket', true); valid = false; }
+    else setError('fCryptoMarket', false);
     if (!valid) return;
 
     const btn = document.getElementById('createSubmit');
@@ -80,6 +104,7 @@ document.addEventListener('partials:loaded', () => {
         requester: 'You',
         recipient: recipient.value,
         method: selectedMethod,
+        cryptoMarket: selectedMethod === 'crypto' ? cryptoMarket.value : null,
         amount,
         reward,
         total: Math.round((amount + reward) * 100) / 100,

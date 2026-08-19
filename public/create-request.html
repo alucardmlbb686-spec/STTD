@@ -61,6 +61,19 @@
             </fieldset>
           </div>
 
+          <div class="card crypto-market-card" id="cryptoMarketCard" style="margin-bottom:24px;" hidden>
+            <fieldset>
+              <legend>Crypto market</legend>
+              <div class="field" id="fCryptoMarket" style="margin-bottom:0;">
+                <label for="cryptoMarket">Choose a cryptocurrency</label>
+                <select class="input" id="cryptoMarket">
+                  <option value="">Select a market</option>
+                </select>
+                <div class="error-msg">Choose a cryptocurrency market.</div>
+              </div>
+            </fieldset>
+          </div>
+
           <div class="card">
             <fieldset>
               <legend>Recipient</legend>
@@ -83,6 +96,7 @@
         <aside class="card summary-card">
           <h3 style="margin-bottom:18px;">Request summary</h3>
           <div class="summary-row"><span>Payment method</span><span class="val" id="sumMethod">—</span></div>
+          <div class="summary-row" id="sumCryptoRow" hidden><span>Crypto market</span><span class="val" id="sumCrypto">—</span></div>
           <div class="summary-row"><span>Request amount</span><span class="val" id="sumAmount">$0.00</span></div>
           <div class="summary-row"><span>Reward</span><span class="val" id="sumReward">$0.00</span></div>
           <div class="summary-row"><span>Network fee</span><span class="val">$0.00</span></div>
