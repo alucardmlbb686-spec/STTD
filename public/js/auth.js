@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = document.getElementById('loginSubmit');
       SC.setLoading(btn, true);
       SCStore.api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: email.value.trim(), password: password.value }) })
-        .then(({ user }) => { SCStore.setUser(user); window.location.href = '/dashboard.html'; })
+        .then(({ user }) => { SCStore.setUser(user); window.location.href = user.role === 'admin' ? '/admin-dashboard.html' : '/dashboard.html'; })
         .catch(error => { SC.toast(error.message, 'error'); SC.setLoading(btn, false); });
     });
   }
