@@ -115,7 +115,25 @@ const SC = (() => {
         console.error('Failed to load partial', name, e);
       }
     }));
+    if (['dashboard', 'browse', 'create', 'my-requests'].includes(document.body.dataset.page)
+      && typeof SCStore !== 'undefined' && !SCStore.isLoggedIn()) {
+      showLoginRequiredDialog();
+    }
     document.dispatchEvent(new CustomEvent('partials:loaded'));
+  }
+
+  function showLoginRequiredDialog(){
+    const overlay = document.createElement('div');
+    overlay.className = 'auth-required-overlay';
+    overlay.innerHTML = `
+      <div class="auth-required-dialog" role="dialog" aria-modal="true" aria-labelledby="authRequiredTitle">
+        <div class="auth-required-icon" aria-hidden="true">!</div>
+        <h2 id="authRequiredTitle">Please Log in to Continue</h2>
+        <p>You need to be logged in to access this section.</p>
+        <a class="btn btn-primary btn-block" href="/login.html">Log in</a>
+        <a class="auth-required-register" href="/register.html">Create an account</a>
+      </div>`;
+    document.body.appendChild(overlay);
   }
 
   function initMobileNav(){

@@ -2,7 +2,7 @@ document.addEventListener('partials:loaded', () => {
   const user = SCStore.getUser();
   document.getElementById('sidebarUserName').textContent = user.name;
   document.getElementById('sidebarAvatar').textContent = SC.initials(user.name);
-  document.getElementById('userChipLogout')?.addEventListener('click', (e) => { e.preventDefault(); window.location.href = '/'; });
+  document.getElementById('userChipLogout')?.addEventListener('click', (e) => { e.preventDefault(); SCStore.clearUser(); window.location.href = '/'; });
 
   const methodFilter = document.getElementById('methodFilter');
   methodFilter.innerHTML += SC.PAYMENT_METHODS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');

@@ -94,14 +94,16 @@ const SCStore = (() => {
   function getUser(){
     const raw = localStorage.getItem(USER_KEY);
     if (raw){ try{ return JSON.parse(raw); }catch(e){} }
-    const fallback = { name: 'Jordan Diaz', email: 'jordan@example.com' };
-    localStorage.setItem(USER_KEY, JSON.stringify(fallback));
-    return fallback;
+    return { name: 'Jordan Diaz', email: 'jordan@example.com' };
   }
+
+  function isLoggedIn(){ return Boolean(localStorage.getItem(USER_KEY)); }
 
   function setUser(user){
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }
 
-  return { getAll, getMine, add, updateStatus, getUser, setUser };
+  function clearUser(){ localStorage.removeItem(USER_KEY); }
+
+  return { getAll, getMine, add, updateStatus, getUser, isLoggedIn, setUser, clearUser };
 })();

@@ -10,6 +10,7 @@ document.addEventListener('partials:loaded', () => {
 
   document.getElementById('userChipLogout')?.addEventListener('click', (e) => {
     e.preventDefault();
+    SCStore.clearUser();
     SC.toast('Signed out. Redirecting to home…');
     setTimeout(() => window.location.href = '/', 700);
   });

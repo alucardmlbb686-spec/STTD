@@ -4,6 +4,7 @@ document.addEventListener('partials:loaded', () => {
   document.getElementById('sidebarAvatar').textContent = SC.initials(user.name);
   document.getElementById('userChipLogout')?.addEventListener('click', (e) => {
     e.preventDefault();
+    SCStore.clearUser();
     window.location.href = '/';
   });
 
