@@ -62,4 +62,18 @@
 @media (max-width: 900px){
   .auth-shell{ grid-template-columns: 1fr; }
   .auth-side{ display:none; }
+  .auth-main{ min-height:100vh; padding:28px 16px; align-items:flex-start; }
+  .auth-box{ max-width:460px; padding-top:12px; }
+  .auth-box .logo{ margin-bottom:36px; }
+}
+
+@media (max-width: 520px){
+  .auth-main{ padding:20px 16px 28px; }
+  .auth-box{ padding-top:0; }
+  .auth-box .logo{ margin-bottom:28px; }
+  .auth-box h1{ font-size:24px; }
+  .auth-box .sub{ margin-bottom:24px; }
+  .oauth-row{ grid-template-columns:1fr; }
+  .form-row-split{ grid-template-columns:1fr; }
+  .auth-foot-link{ margin-top:24px; }
 }

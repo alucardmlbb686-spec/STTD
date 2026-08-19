@@ -195,4 +195,12 @@
   .steps-grid, .benefits-grid, .footer-grid{ grid-template-columns: 1fr; }
   .hero-cta .btn{ width:100%; }
   .ai-chat-widget{ right:16px; bottom:16px; }
+  .hero{ padding-top:44px; }
+  .hero-inner > :first-child{ transform:none; }
+  .hero h1{ font-size:clamp(2.15rem, 11vw, 3rem); }
+  .hero .lead{ font-size:15px; }
+  .hero-visual{ margin-top:10px; }
+  .vision-inner h2{ font-size:clamp(48px, 15vw, 72px); margin-bottom:64px; }
+  .vision-inner p{ font-size:16px; }
+  .cta-banner{ padding:24px 18px; }
 }
