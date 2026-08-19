@@ -216,6 +216,7 @@ table.data-table{ width:100%; min-width:620px; border-collapse: collapse; }
 .nav-links a:hover,
 .nav-links a.active{ color:#00ff00; }
 .nav-actions{ display:flex; align-items:center; gap: var(--sp-3); }
+[hidden]{ display:none !important; }
 
 .logo{ display:flex; align-items:center; gap:10px; font-family: var(--font-display); font-weight:700; font-size:18px; color: var(--text-0); letter-spacing:-0.02em; }
   .logo{ display:flex; align-items:center; gap:10px; font-family: var(--font-display); font-weight:700; font-size:18px; color:#00ff00; letter-spacing:-0.02em; }
