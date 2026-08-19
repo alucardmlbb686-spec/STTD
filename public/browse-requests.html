@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Browse requests — StarCurrency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body data-page="browse">
+<div class="app-shell">
+  <div data-include="sidebar"></div>
+
+  <div class="main-area">
+    <div data-include="topbar"></div>
+
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1>Browse requests</h1>
+          <div class="sub"><span id="resultCount">—</span> open requests waiting for a match</div>
+        </div>
+      </div>
+
+      <div class="filters-bar">
+        <div class="input-group">
+          <svg class="input-icon" viewBox="0 0 18 18" fill="none"><circle cx="8" cy="8" r="5.2" stroke="currentColor" stroke-width="1.5"/><path d="M15 15l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input class="input" id="searchInput" placeholder="Search by request ID or requester…">
+        </div>
+        <div class="select-wrap">
+          <select class="input filter-select" id="methodFilter">
+            <option value="">All payment methods</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <select class="input filter-select" id="statusFilter">
+            <option value="">All statuses</option>
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="accepted">Accepted</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <div class="select-wrap">
+          <select class="input filter-select" id="sortFilter">
+            <option value="newest">Newest first</option>
+            <option value="reward">Highest reward</option>
+            <option value="amount">Highest amount</option>
+          </select>
+        </div>
+        <div class="view-toggle">
+          <button id="viewCards" class="active" aria-label="Card view"><svg width="16" height="16" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="2" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="10" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.4"/><rect x="10" y="10" width="6" height="6" rx="1.2" stroke="currentColor" stroke-width="1.4"/></svg></button>
+          <button id="viewTable" aria-label="Table view"><svg width="16" height="16" viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="12" rx="1.4" stroke="currentColor" stroke-width="1.4"/><path d="M2 7.5h14M6.5 7.5V15" stroke="currentColor" stroke-width="1.4"/></svg></button>
+        </div>
+      </div>
+
+      <div id="cardsView" class="requests-grid"></div>
+
+      <div id="tableView" class="table-wrap" style="display:none;">
+        <table class="data-table">
+          <thead>
+            <tr><th>Request</th><th>Method</th><th>Amount</th><th>Reward</th><th>Status</th><th>Posted</th><th></th></tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="acceptModal">
+  <div class="modal">
+    <h3 style="margin-bottom:10px;">Accept this request?</h3>
+    <p style="font-size:13.5px; margin-bottom:20px;" id="acceptModalSub">You're about to accept a request. You'll be responsible for sending the funds through the selected method.</p>
+    <div class="kv-list" id="acceptModalDetails" style="margin-bottom:22px;"></div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-secondary btn-block" id="acceptCancel">Cancel</button>
+      <button class="btn btn-primary btn-block" id="acceptConfirm">Confirm accept <span class="spinner"></span></button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/store.js"></script>
+<script src="/js/browse-requests.js"></script>
+</body>
+</html>

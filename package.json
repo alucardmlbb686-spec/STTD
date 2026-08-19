@@ -1,0 +1,25 @@
+{
+  "name": "starcurrency",
+  "version": "1.0.0",
+  "description": "StarCurrency — a peer-to-peer payment request marketplace (dark, fintech-style UI).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "fintech",
+    "p2p",
+    "payments",
+    "marketplace"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.22.2",
+    "pg": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

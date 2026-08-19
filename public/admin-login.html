@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin login — StarCurrency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/auth.css">
+</head>
+<body data-page="admin-login">
+<div class="auth-shell">
+
+  <aside class="auth-side">
+    <a href="/" class="logo">
+      <img class="logo-mark" src="/assets/logo.png" alt="StarCurrency logo">
+      StarCurrency
+    </a>
+    <div class="auth-side-content">
+      <span class="eyebrow" style="color:var(--amber-400); background: rgba(240,185,79,0.1); border-color: rgba(240,185,79,0.3);"><span class="dot" style="background:var(--amber-400);"></span> Restricted access</span>
+      <h2>Admin console</h2>
+      <p>This area is limited to StarCurrency staff for platform operations: user management, dispute resolution, and transaction oversight.</p>
+      <div class="auth-badges">
+        <span class="pill-tag">🔐 2FA required</span>
+        <span class="pill-tag">📋 Access is logged</span>
+      </div>
+      <div class="auth-quote">
+        <p>All admin sessions are monitored and audited in line with our internal security policy. Unauthorized access attempts are reported.</p>
+        <div class="q-author">— StarCurrency Trust &amp; Safety</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="auth-main">
+    <div class="auth-box">
+      <a href="/" class="logo">
+        <img class="logo-mark" src="/assets/logo.png" alt="StarCurrency logo">
+        StarCurrency
+      </a>
+      <span class="admin-badge-topline">
+        <svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M9 1.5 15.5 4v4.5c0 4.2-2.7 7-6.5 8-3.8-1-6.5-3.8-6.5-8V4L9 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        Admin access
+      </span>
+      <h1>Sign in to admin</h1>
+      <p class="sub">Use your staff credentials to continue.</p>
+
+      <form id="adminLoginForm" novalidate>
+        <div class="field" id="fEmail">
+          <label for="email">Staff email</label>
+          <div class="input-group">
+            <svg class="input-icon" viewBox="0 0 18 18" fill="none"><path d="M2.5 4.5h13a1 1 0 011 1v7a1 1 0 01-1 1h-13a1 1 0 01-1-1v-7a1 1 0 011-1Z" stroke="currentColor" stroke-width="1.4"/><path d="M2 5l7 5 7-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input class="input" type="text" id="email" placeholder="admin@123" autocomplete="username" required>
+          </div>
+          <div class="error-msg">Enter a valid staff email.</div>
+        </div>
+
+        <div class="field" id="fPassword">
+          <label for="password">Password</label>
+          <div class="input-group">
+            <svg class="input-icon" viewBox="0 0 18 18" fill="none"><rect x="3.5" y="8" width="11" height="7.5" rx="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M5.8 8V5.6a3.2 3.2 0 016.4 0V8" stroke="currentColor" stroke-width="1.4"/></svg>
+            <input class="input" type="password" id="password" placeholder="Enter your password" autocomplete="current-password" required style="padding-right:44px;">
+            <button type="button" class="password-toggle" data-toggle-for="password" aria-label="Show password">
+              <svg width="17" height="17" viewBox="0 0 18 18" fill="none"><path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="2.3" stroke="currentColor" stroke-width="1.4"/></svg>
+            </button>
+          </div>
+          <div class="error-msg">Enter your password.</div>
+        </div>
+
+        <div class="field" id="fCode">
+          <label for="code">2FA code</label>
+          <div class="input-group">
+            <svg class="input-icon" viewBox="0 0 18 18" fill="none"><rect x="4" y="2" width="10" height="15" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 14.3h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            <input class="input mono" type="text" id="code" placeholder="Optional 6-digit code" maxlength="6" inputmode="numeric">
+          </div>
+          <div class="hint">Enter the code from your authenticator app.</div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="adminLoginSubmit" style="margin-top:8px;">
+          Sign in
+          <span class="spinner"></span>
+        </button>
+      </form>
+
+      <p class="auth-foot-link">Not staff? <a href="/login.html">Go to member login</a></p>
+    </div>
+  </main>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

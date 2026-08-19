@@ -1,0 +1,86 @@
+/* =========================================================
+   StarCurrency — Design Tokens
+   A dark, jade-tinted fintech system. Grays are green-hued
+   rather than neutral, so the whole surface feels like one
+   material instead of "dark UI + green accent slapped on".
+   ========================================================= */
+
+:root{
+  /* ---- Base surfaces (green-tinted charcoal, not pure black) ---- */
+  --bg-0: #0A0F0D;          /* page background */
+  --bg-1: #0E1512;          /* section alt */
+  --surface-1: #121A16;     /* card */
+  --surface-2: #17211C;     /* elevated card / hover */
+  --surface-3: #1E2A24;     /* input fields */
+  --border-1: #223028;      /* hairline border */
+  --border-2: #2C3C33;      /* stronger border */
+  --border-hairline: rgba(126, 214, 168, 0.10);
+
+  /* ---- Text (sage-gray scale, tinted toward the brand hue) ---- */
+  --text-0: #F3F7F4;        /* headings / high emphasis */
+  --text-1: #C9D4CD;        /* body */
+  --text-2: #8FA098;        /* secondary / captions */
+  --text-3: #5C6C63;        /* disabled / faint */
+
+  /* ---- Brand green ---- */
+  --star-50:  #E9FBF2;
+  --star-100: #C6F3DC;
+  --star-300: #00FF00;
+  --star-400: #00FF00;
+  --star-500: #00FF00;      /* primary */
+  --star-600: #00D900;      /* primary hover */
+  --star-700: #1C7D5A;
+  --star-900: #0F3C2C;
+  --star-glow: rgba(0, 255, 0, 0.35);
+
+  /* ---- Status ---- */
+  --amber-400: #F0B94F;
+  --amber-500: #DDA136;
+  --red-400: #F17E75;
+  --red-500: #E15C51;
+  --blue-400: #6FA8F5;
+
+  /* ---- Typography ---- */
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* ---- Radii ---- */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* ---- Shadows ---- */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.35);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.45);
+  --shadow-glow: 0 0 0 1px rgba(51,196,138,0.25), 0 8px 30px rgba(51,196,138,0.12);
+
+  /* ---- Spacing scale ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 56px;
+  --sp-10: 80px;
+
+  /* ---- Motion ---- */
+  --ease: cubic-bezier(.22,.9,.32,1);
+  --fast: 140ms;
+  --med: 260ms;
+  --slow: 420ms;
+
+  --container: 1200px;
+  --topbar-h: 72px;
+  --sidebar-w: 264px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

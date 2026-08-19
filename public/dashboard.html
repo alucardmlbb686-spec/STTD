@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — StarCurrency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body data-page="dashboard">
+<div class="app-shell">
+  <div data-include="sidebar"></div>
+
+  <div class="main-area">
+    <div data-include="topbar"></div>
+
+    <div class="page-body">
+      <div class="page-title-row">
+        <div>
+          <h1 id="greeting">Welcome back</h1>
+          <div class="sub">Here's what's happening with your requests today.</div>
+        </div>
+        <div class="title-actions">
+          <a href="/browse-requests.html" class="btn btn-secondary">Browse requests</a>
+          <a href="/create-request.html" class="btn btn-primary">+ New request</a>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="statsGrid">
+        <!-- stat cards injected -->
+      </div>
+
+      <div class="dash-grid">
+        <div>
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="panel-head">
+              <h3>Active requests</h3>
+              <a href="/my-requests.html">View all</a>
+            </div>
+            <div id="activeList"></div>
+          </div>
+
+          <div class="card">
+            <div class="panel-head">
+              <h3>Accepted &amp; completed</h3>
+              <a href="/my-requests.html">View all</a>
+            </div>
+            <div id="acceptedList"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="panel-head">
+              <h3>Recent activity</h3>
+            </div>
+            <div id="activityList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/store.js"></script>
+<script src="/js/dashboard.js"></script>
+</body>
+</html>
