@@ -54,7 +54,7 @@ document.addEventListener('partials:loaded', () => {
     if (q) data = data.filter(r => r.id.toLowerCase().includes(q) || r.requester.toLowerCase().includes(q));
     if (method) data = data.filter(r => r.method === method);
     if (status) data = data.filter(r => r.status === status);
-    else data = data.filter(r => ['available', 'open', 'pending', 'accepted', 'completed'].includes(r.status));
+    else data = data.filter(r => r.status === 'open' && r.depositStatus === 'confirmed');
 
     if (sort === 'reward') data.sort((a,b) => b.reward - a.reward);
     else if (sort === 'amount') data.sort((a,b) => b.amount - a.amount);
@@ -104,7 +104,8 @@ document.addEventListener('partials:loaded', () => {
 
   function cardHtml(r){
     const meta = SC.methodMeta(r.method);
-    const canAccept = ['available', 'open'].includes(r.status);
+    const canAccept = r.status === 'open' && r.depositStatus === 'confirmed';
+    const isFulfiller = r.fulfiller === SCStore.getUser().name;
     const recipient = maskRecipient(r.recipient);
     return `
       <div class="card card-hover request-card">
@@ -116,14 +117,16 @@ document.addEventListener('partials:loaded', () => {
           ${SC.statusBadge(r.status)}
         </div>
         <div class="request-card-title">Send ${SC.fmtMoney(r.amount)} via ${meta.label}</div>
-        <div class="request-card-recipient">Recipient: <span>${recipient}</span></div>
+        <div class="request-card-recipient">Reason: <span>${r.reason || 'Payment request'}</span></div>
+        <div class="request-card-recipient">Due: <span>${r.dueAt ? new Date(r.dueAt).toLocaleString() : 'Not specified'}</span></div>
+        <div class="request-card-recipient">Requester: <span>${r.requester} · ${r.completedRequests || 0} completed</span></div>
         <div class="rc-amounts">
           <div class="rc-amt-block reward"><div class="a-label">Earn</div><div class="a-value">${SC.fmtMoney(r.reward)} reward</div></div>
         </div>
         <div class="rc-foot">
           <div><div class="rc-id">${r.id}</div><div class="cell-muted">${r.requester} · ${SC.timeAgo(r.createdAt)}</div></div>
-          <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm accept-btn" data-id="${r.id}" ${canAccept ? '' : 'disabled'}>
-            ${canAccept ? 'Accept Request' : statusLabel(r.status)}
+          <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm ${isFulfiller && r.status === 'accepted' ? 'proof-btn' : 'accept-btn'}" data-id="${r.id}" ${canAccept || (isFulfiller && r.status === 'accepted') ? '' : 'disabled'}>
+            ${canAccept ? 'Accept Request' : isFulfiller && r.status === 'accepted' ? 'Submit proof' : statusLabel(r.status)}
           </button>
         </div>
       </div>
@@ -132,7 +135,7 @@ document.addEventListener('partials:loaded', () => {
 
   function rowHtml(r){
     const meta = SC.methodMeta(r.method);
-    const canAccept = ['available', 'open'].includes(r.status);
+    const canAccept = r.status === 'open' && r.depositStatus === 'confirmed';
     return `
       <tr>
         <td class="cell-primary">${r.id}<div class="cell-muted">${r.requester}</div></td>
@@ -153,7 +156,7 @@ document.addEventListener('partials:loaded', () => {
   }
 
   function statusLabel(status){
-    return { draft: 'Draft', awaiting_funding: 'Awaiting funding', available: 'Available', pending: 'Pending', accepted: 'Accepted', payment_sent: 'Payment sent', verification: 'Verification', completed: 'Completed', disputed: 'Disputed', cancelled: 'Cancelled' }[status] || 'Closed';
+    return { draft: 'Draft', awaiting_deposit: 'Awaiting Deposit', deposit_confirming: 'Deposit Confirming', open: 'Open', accepted: 'Accepted', in_progress: 'In Progress', awaiting_confirmation: 'Awaiting Confirmation', under_admin_review: 'Under Admin Review', completed: 'Completed', disputed: 'Disputed', cancelled: 'Cancelled' }[status] || 'Closed';
   }
 
   function maskRecipient(value){
@@ -168,6 +171,11 @@ document.addEventListener('partials:loaded', () => {
   let pendingId = null;
 
   function bindAcceptButtons(){
+    SC.qsa('.proof-btn').forEach(btn => btn.addEventListener('click', () => {
+      pendingId = btn.dataset.id;
+      document.getElementById('proofDetails').value = '';
+      document.getElementById('proofModal').classList.add('show');
+    }));
     SC.qsa('.accept-btn').forEach(btn => {
       if (btn.disabled) return;
       btn.addEventListener('click', () => {
@@ -177,7 +185,8 @@ document.addEventListener('partials:loaded', () => {
         document.getElementById('acceptModalDetails').innerHTML = `
           <div class="kv-row"><span class="k">Amount to send</span><span class="v">${SC.fmtMoney(r.amount)}</span></div>
           <div class="kv-row"><span class="k">Your reward</span><span class="v text-green">+${SC.fmtMoney(r.reward)}</span></div>
-          <div class="kv-row"><span class="k">Recipient</span><span class="v">${r.recipient}</span></div>
+          <div class="kv-row"><span class="k">Recipient</span><span class="v">Contact shared after acceptance</span></div>
+          <div class="kv-row"><span class="k">Your sender identity</span><span class="v">${SCStore.getUser().name} · ${SCStore.getUser().email}</span></div>
         `;
         acceptModal.classList.add('show');
       });
@@ -191,11 +200,26 @@ document.addEventListener('partials:loaded', () => {
     const btn = this;
     SC.setLoading(btn, true);
     setTimeout(() => {
-      SCStore.updateStatus(pendingId, 'accepted');
+      SCStore.update(pendingId, { status: 'accepted', fulfiller: SCStore.getUser().name, acceptedAt: new Date().toISOString() });
       SC.setLoading(btn, false);
       acceptModal.classList.remove('show');
       SC.toast(`${pendingId} accepted — recipient will be notified.`, 'success');
       refresh();
     }, 900);
+  });
+
+  const proofModal = document.getElementById('proofModal');
+  document.getElementById('proofCancel').addEventListener('click', () => proofModal.classList.remove('show'));
+  document.getElementById('proofSubmit').addEventListener('click', function(){
+    const details = document.getElementById('proofDetails').value.trim();
+    if (!details){ SC.toast('Add payment proof details first.', 'error'); return; }
+    SC.setLoading(this, true);
+    setTimeout(() => {
+      SCStore.update(pendingId, { status: 'awaiting_confirmation', proof: { details, submittedAt: new Date().toISOString() } });
+      SC.setLoading(this, false);
+      proofModal.classList.remove('show');
+      SC.toast(`${pendingId} is awaiting requester confirmation.`, 'success');
+      refresh();
+    }, 700);
   });
 });

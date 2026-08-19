@@ -39,11 +39,14 @@
         <div class="select-wrap">
           <select class="input filter-select" id="statusFilter">
             <option value="">All statuses</option>
-            <option value="available">Available</option>
-            <option value="awaiting_funding">Awaiting funding</option>
+            <option value="awaiting_deposit">Awaiting Deposit</option>
+            <option value="deposit_confirming">Deposit Confirming</option>
+            <option value="open">Open</option>
             <option value="pending">Pending</option>
             <option value="accepted">Accepted</option>
-            <option value="payment_sent">Payment sent</option>
+            <option value="in_progress">In Progress</option>
+            <option value="awaiting_confirmation">Awaiting Confirmation</option>
+            <option value="under_admin_review">Under Admin Review</option>
             <option value="verification">Verification</option>
             <option value="completed">Completed</option>
             <option value="disputed">Disputed</option>
@@ -74,6 +77,18 @@
       </div>
 
       <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="proofModal">
+  <div class="modal">
+    <h3 style="margin-bottom:10px;">Submit payment proof</h3>
+    <p style="font-size:13.5px; margin-bottom:20px;">Add a transaction reference or a short description of the completed payment.</p>
+    <textarea class="input" id="proofDetails" rows="4" placeholder="Transaction ID, confirmation time, or other details" required></textarea>
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-secondary btn-block" id="proofCancel">Cancel</button>
+      <button class="btn btn-primary btn-block" id="proofSubmit">Submit proof <span class="spinner"></span></button>
     </div>
   </div>
 </div>

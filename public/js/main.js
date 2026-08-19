@@ -9,11 +9,9 @@ const SC = (() => {
 
   const PAYMENT_METHODS = [
     { id: 'venmo',   label: 'Venmo',            sub: 'Username · Phone',  icon: 'venmo' },
-    { id: 'cashapp', label: 'Cash App',         sub: '$Cashtag · Phone',  icon: 'cashapp' },
     { id: 'paypal',  label: 'PayPal',           sub: 'Email · Username',  icon: 'paypal' },
-    { id: 'bank',    label: 'Bank transfer',    sub: 'ACH · Wire',        icon: 'bank' },
-    { id: 'mobile',  label: 'Mobile money',     sub: 'Wallet transfer',   icon: 'mobile' },
-    { id: 'crypto',  label: 'Crypto',           sub: 'BTC · ETH · USDC',  icon: 'crypto' },
+    { id: 'zelle',   label: 'Zelle',            sub: 'Email · Phone',     icon: 'zelle' },
+    { id: 'cashapp', label: 'Cash App',         sub: '$Cashtag · Phone',  icon: 'cashapp' },
   ];
 
   function fmtMoney(n, currency = 'USD'){
@@ -55,6 +53,7 @@ const SC = (() => {
     cashapp: 'https://cdn.simpleicons.org/cashapp',
     bank: '/assets/icons8-bank-building-40.png',
     crypto: '/assets/icons8-crypto-48.png',
+    zelle: 'https://cdn.simpleicons.org/zelle',
     paypal: '/assets/icons8-paypal-32.png',
   };
   function methodIcon(id){
@@ -65,14 +64,19 @@ const SC = (() => {
 
   function statusBadge(status){
     const map = {
+      awaiting_deposit: { cls: 'badge-pending', label: 'Awaiting Deposit' },
+      deposit_confirming: { cls: 'badge-pending', label: 'Deposit Confirming' },
       open:      { cls: 'badge-open',      label: 'Open' },
       draft:     { cls: 'badge-pending',   label: 'Draft' },
       awaiting_funding: { cls: 'badge-pending', label: 'Awaiting funding' },
       available: { cls: 'badge-open',      label: 'Available' },
       pending:   { cls: 'badge-pending',   label: 'Pending' },
       accepted:  { cls: 'badge-accepted',  label: 'Accepted' },
+      in_progress: { cls: 'badge-accepted', label: 'In Progress' },
       payment_sent: { cls: 'badge-accepted', label: 'Payment sent' },
+      awaiting_confirmation: { cls: 'badge-pending', label: 'Awaiting Confirmation' },
       verification: { cls: 'badge-pending', label: 'Verification' },
+      under_admin_review: { cls: 'badge-pending', label: 'Under Admin Review' },
       completed: { cls: 'badge-completed', label: 'Completed' },
       disputed:  { cls: 'badge-failed',    label: 'Disputed' },
       cancelled: { cls: 'badge-cancelled', label: 'Cancelled' },

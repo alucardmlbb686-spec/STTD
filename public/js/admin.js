@@ -46,6 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('partials:loaded', () => {
   const statsGrid = document.getElementById('adminStats');
   if (!statsGrid) return; // not the admin dashboard page
+  if (!localStorage.getItem('starcurrency_admin_v1')) {
+    window.location.href = '/admin-login.html';
+    return;
+  }
 
   const section = new URLSearchParams(window.location.search).get('section') || 'overview';
   const sectionLinks = SC.qsa('.side-nav a[data-page]');
@@ -82,7 +86,7 @@ document.addEventListener('partials:loaded', () => {
     const openCount = all.filter(r => r.status === 'open').length;
     const volume = all.reduce((s,r) => s + r.amount, 0);
     const completed = all.filter(r => r.status === 'completed').length;
-    const disputes = 3;
+    const disputes = all.filter(r => ['disputed','under_admin_review'].includes(r.status)).length;
 
     statsGrid.innerHTML = `
       ${statCard('Total requests', all.length, '+12% vs last week')}
@@ -101,11 +105,23 @@ document.addEventListener('partials:loaded', () => {
         <td>${SC.statusBadge(r.status)}</td>
         <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
         <td><div class="table-actions">
-          <button class="icon-btn" aria-label="View"><svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="2.3" stroke="currentColor" stroke-width="1.4"/></svg></button>
-          <button class="icon-btn" aria-label="Flag"><svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M4 2.5v13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M4 3h9l-2.2 3L13 9H4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>
+          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'under_admin_review' ? 'Release escrow' : 'Review'}</button>
         </div></td>
       </tr>
     `).join('');
+
+    document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', () => {
+      const request = SCStore.getAll().find(item => item.id === button.dataset.id);
+      if (!request) return;
+      if (request.status === 'under_admin_review') {
+        SCStore.update(request.id, { status: 'completed', releasedAt: new Date().toISOString(), releasedBy: 'admin@123' });
+        SC.toast(`${request.id} escrow released and marked Completed.`, 'success');
+      } else {
+        SCStore.update(request.id, { status: 'under_admin_review', adminReviewStartedAt: new Date().toISOString() });
+        SC.toast(`${request.id} moved to Under Admin Review.`, 'success');
+      }
+      render();
+    }));
 
     const methodCounts = {};
     all.forEach(r => methodCounts[r.method] = (methodCounts[r.method]||0)+1);
@@ -175,7 +191,7 @@ document.addEventListener('partials:loaded', () => {
     }
 
     const users = [...new Set(all.map(request => request.requester))];
-    const disputes = all.filter(request => request.status === 'cancelled').slice(0, 10);
+    const disputes = all.filter(request => ['disputed','under_admin_review'].includes(request.status)).slice(0, 10);
     const transactions = all.filter(request => ['accepted', 'completed'].includes(request.status)).slice(0, 20);
     const sectionRecords = name === 'disputes' ? disputes : name === 'transactions' ? transactions : all.slice(0, 20);
     const rows = name === 'users'

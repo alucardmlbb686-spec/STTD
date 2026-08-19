@@ -116,7 +116,10 @@ document.addEventListener('partials:loaded', () => {
     document.getElementById('sumCrypto').textContent = cryptoMarket.value || '—';
     document.getElementById('sumAmount').textContent = SC.fmtMoney(amount);
     document.getElementById('sumReward').textContent = SC.fmtMoney(reward);
-    document.getElementById('sumTotal').textContent = SC.fmtMoney(amount + reward);
+    const fee = Math.round(amount * 0.025 * 100) / 100;
+    document.getElementById('sumFee').textContent = SC.fmtMoney(fee);
+    document.getElementById('sumTotal').textContent = SC.fmtMoney(amount + reward + fee);
+    document.getElementById('escrowTotal').textContent = `Total deposit: ${SC.fmtMoney(amount + reward + fee)}`;
   }
   amountEl.addEventListener('input', () => {
     if (!rewardEl.dataset.touched){
@@ -136,14 +139,16 @@ document.addEventListener('partials:loaded', () => {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const recipient = document.getElementById('recipient');
+    const recipientName = document.getElementById('recipientName');
     let valid = true;
 
     if (!amountEl.value || parseFloat(amountEl.value) <= 0){ setError('fAmount', true); valid = false; } else setError('fAmount', false);
+    if (recipientName.value.trim().split(/\s+/).filter(Boolean).length < 2){ setError('fRecipientName', true); valid = false; } else setError('fRecipientName', false);
     const recipientValue = recipient.value.trim();
     const recipientOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientValue)
-      || /^[+\d][\d\s-]{6,}$/.test(recipientValue)
-      || (['venmo', 'cashapp', 'paypal'].includes(selectedMethod) && /^[A-Za-z0-9_.$@+-]{2,}$/.test(recipientValue));
+      || /^[+\d][\d\s().-]{6,}$/.test(recipientValue);
     if (!recipientOk){ setError('fRecipient', true); valid = false; } else setError('fRecipient', false);
+    if (!document.getElementById('reason').value.trim() || !document.getElementById('dueAt').value){ valid = false; }
     if (selectedMethod === 'crypto' && !cryptoMarket.value){ setError('fCryptoMarket', true); valid = false; }
     else setError('fCryptoMarket', false);
     if (!valid) return;
@@ -162,8 +167,15 @@ document.addEventListener('partials:loaded', () => {
         cryptoMarket: selectedMethod === 'crypto' ? cryptoMarket.value : null,
         amount,
         reward,
-        total: Math.round((amount + reward) * 100) / 100,
-        status: 'available',
+        fee: Math.round(amount * 0.025 * 100) / 100,
+        total: Math.round((amount + reward + amount * 0.025) * 100) / 100,
+        status: 'awaiting_deposit',
+        depositStatus: 'pending',
+        depositId: null,
+        recipientName: recipientName.value.trim(),
+        reason: document.getElementById('reason').value.trim(),
+        dueAt: document.getElementById('dueAt').value,
+        escrowAsset: document.getElementById('escrowAsset').value,
         createdAt: new Date().toISOString(),
         note: document.getElementById('note').value || 'No additional note provided.',
         mine: true,
@@ -171,8 +183,16 @@ document.addEventListener('partials:loaded', () => {
       SCStore.add(req);
       SC.setLoading(btn, false);
 
-      document.getElementById('successSub').textContent = `${req.id} funded with ${SC.fmtMoney(req.total)} and now available in Browse Requests.`;
+      document.getElementById('successSub').textContent = `${req.id} is Awaiting Deposit. Confirm ${SC.fmtMoney(req.total)} in ${req.escrowAsset} escrow before it becomes Open.`;
       document.getElementById('successModal').classList.add('show');
     }, 900);
   });
+
+  document.getElementById('confirmDeposit').addEventListener('click', () => {
+    const request = SCStore.getMine()[0];
+    if (!request || request.status !== 'awaiting_deposit') return;
+    SCStore.update(request.id, { status: 'open', depositStatus: 'confirmed', depositId: SC.uid('DEP') });
+    window.location.href = '/my-requests.html';
+  });
+  document.getElementById('depositLater').addEventListener('click', () => { window.location.href = '/my-requests.html'; });
 });

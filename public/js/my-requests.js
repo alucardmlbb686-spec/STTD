@@ -21,13 +21,13 @@ document.addEventListener('partials:loaded', () => {
   function render(){
     const all = SCStore.getMine().sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     document.getElementById('cAll').textContent = all.length;
-    document.getElementById('cOpen').textContent = all.filter(r => r.status === 'open' || r.status === 'pending').length;
-    document.getElementById('cAccepted').textContent = all.filter(r => r.status === 'accepted').length;
+    document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status)).length;
+    document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
     document.getElementById('cCompleted').textContent = all.filter(r => r.status === 'completed').length;
     document.getElementById('cCancelled').textContent = all.filter(r => r.status === 'cancelled').length;
 
     let data = all;
-    if (activeTab === 'open') data = all.filter(r => r.status === 'open' || r.status === 'pending');
+    if (activeTab === 'open') data = all.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status));
     else if (activeTab !== 'all') data = all.filter(r => r.status === activeTab);
 
     if (!data.length){
@@ -69,12 +69,19 @@ document.addEventListener('partials:loaded', () => {
       <div class="kv-row"><span class="k">Recipient</span><span class="v">${r.recipient}</span></div>
       <div class="kv-row"><span class="k">Amount</span><span class="v">${SC.fmtMoney(r.amount)}</span></div>
       <div class="kv-row"><span class="k">Reward</span><span class="v">${SC.fmtMoney(r.reward)}</span></div>
-      <div class="kv-row"><span class="k">Total funded</span><span class="v">${SC.fmtMoney(r.total)}</span></div>
+      <div class="kv-row"><span class="k">Platform fee</span><span class="v">${SC.fmtMoney(r.fee || 0)}</span></div>
+      <div class="kv-row"><span class="k">Total deposit</span><span class="v">${SC.fmtMoney(r.total)}</span></div>
+      <div class="kv-row"><span class="k">Escrow</span><span class="v">${r.escrowAsset || 'USDT'} · ${r.depositStatus || 'pending'}</span></div>
+      <div class="kv-row"><span class="k">Reason</span><span class="v">${r.reason || '—'}</span></div>
+      <div class="kv-row"><span class="k">Due</span><span class="v">${r.dueAt ? new Date(r.dueAt).toLocaleString() : '—'}</span></div>
+      <div class="kv-row"><span class="k">Payment proof</span><span class="v" style="max-width:220px; text-align:right;">${r.proof?.details || 'Not submitted'}</span></div>
       <div class="kv-row"><span class="k">Posted</span><span class="v">${SC.timeAgo(r.createdAt)}</span></div>
       <div class="kv-row"><span class="k">Note</span><span class="v" style="max-width:220px; text-align:right;">${r.note || '—'}</span></div>
     `;
     const cancelBtn = document.getElementById('detailCancelReq');
-    cancelBtn.style.display = (r.status === 'open' || r.status === 'pending') ? 'inline-flex' : 'none';
+    cancelBtn.style.display = ['awaiting_deposit','deposit_confirming','open'].includes(r.status) ? 'inline-flex' : 'none';
+    document.getElementById('detailConfirmReq').style.display = r.status === 'awaiting_confirmation' ? 'inline-flex' : 'none';
+    document.getElementById('detailDisputeReq').style.display = ['awaiting_confirmation','under_admin_review'].includes(r.status) ? 'inline-flex' : 'none';
     detailModal.classList.add('show');
   }
 
@@ -90,5 +97,18 @@ document.addEventListener('partials:loaded', () => {
       SC.toast('Request cancelled.', 'success');
       render();
     }, 700);
+  });
+
+  document.getElementById('detailConfirmReq').addEventListener('click', () => {
+    SCStore.update(pendingCancelId, { status: 'under_admin_review', completionConfirmedAt: new Date().toISOString() });
+    detailModal.classList.remove('show');
+    SC.toast('Completion confirmed. An authorized admin will release escrow.', 'success');
+    render();
+  });
+  document.getElementById('detailDisputeReq').addEventListener('click', () => {
+    SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: 'Requester reported an issue.', createdAt: new Date().toISOString() } });
+    detailModal.classList.remove('show');
+    SC.toast('Issue reported for admin review.', 'success');
+    render();
   });
 });

@@ -75,23 +75,28 @@
             </fieldset>
           </div>
 
-          <div class="card">
+          <div class="card" style="margin-bottom:24px;">
             <fieldset>
               <legend>Recipient</legend>
+              <div class="form-row-split">
+              <div class="field" id="fRecipientName"><label for="recipientName">Recipient full name</label><input class="input" id="recipientName" placeholder="Alex Morgan" required><div class="error-msg">Enter the recipient's full name.</div></div>
               <div class="field" id="fRecipient">
-                <label for="recipient">Recipient Venmo, Cash App, or PayPal email, username, or phone</label>
+                <label for="recipient">Recipient email or phone</label>
                 <div class="input-group">
                   <svg class="input-icon" viewBox="0 0 18 18" fill="none"><path d="M2.5 4.5h13a1 1 0 011 1v7a1 1 0 01-1 1h-13a1 1 0 01-1-1v-7a1 1 0 011-1Z" stroke="currentColor" stroke-width="1.4"/><path d="M2 5l7 5 7-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
                   <input class="input" type="text" id="recipient" placeholder="name@example.com or +1 555 010 1234" required>
                 </div>
                 <div class="error-msg">Enter a valid email or phone number.</div>
               </div>
+              </div>
+              <div class="form-row-split"><div class="field"><label for="reason">Reason for request</label><input class="input" id="reason" placeholder="Rent, tuition, family support..." required></div><div class="field"><label for="dueAt">Due date and time</label><input class="input" id="dueAt" type="datetime-local" required></div></div>
               <div class="field" style="margin-bottom:0;">
                 <label for="note">Note for fulfiller <span class="text-faint">(optional)</span></label>
                 <textarea class="input" id="note" rows="3" placeholder="Any context that helps a peer complete this quickly…"></textarea>
               </div>
             </fieldset>
           </div>
+          <div class="card escrow-card"><fieldset><legend>Crypto escrow deposit</legend><p class="hint">Deposit the total into the platform BTC or USDT escrow wallet before your request becomes Open.</p><div class="form-row-split"><div class="field"><label for="escrowAsset">Escrow asset</label><select class="input" id="escrowAsset"><option>USDT</option><option>BTC</option></select></div><div class="field"><label for="escrowWallet">Escrow wallet</label><input class="input mono" id="escrowWallet" value="Platform escrow wallet" readonly></div></div><div class="escrow-notice"><strong id="escrowTotal">Total deposit: $0.00</strong><span>Status: Awaiting Deposit</span></div></fieldset></div>
         </div>
 
         <aside class="card summary-card">
@@ -100,7 +105,7 @@
           <div class="summary-row" id="sumCryptoRow" hidden><span>Crypto market</span><span class="val" id="sumCrypto">—</span></div>
           <div class="summary-row"><span>Amount Needed</span><span class="val" id="sumAmount">$0.00</span></div>
           <div class="summary-row"><span>Reward</span><span class="val" id="sumReward">$0.00</span></div>
-          <div class="summary-row"><span>Network fee</span><span class="val">$0.00</span></div>
+          <div class="summary-row"><span>Platform fee (2.5%)</span><span class="val" id="sumFee">$0.00</span></div>
           <div class="summary-total">
             <span class="t-label">Total to Deposit</span>
             <span class="t-value" id="sumTotal">$0.00</span>
@@ -121,11 +126,11 @@
     <div style="width:52px;height:52px;border-radius:50%;background:rgba(51,196,138,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;color:var(--star-400);">
       <svg width="24" height="24" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-      <h3 style="margin-bottom:8px;">Request created &amp; funded</h3>
-    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Your request is now available in Browse Requests.</p>
+      <h3 style="margin-bottom:8px;">Request created</h3>
+    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Confirm the escrow deposit before this request can appear in Browse Requests.</p>
     <div style="display:flex; gap:10px;">
-      <a href="/my-requests.html" class="btn btn-secondary btn-block">View my requests</a>
-      <a href="/browse-requests.html" class="btn btn-primary btn-block">Browse requests</a>
+      <button class="btn btn-secondary btn-block" id="depositLater">Deposit later</button>
+      <button class="btn btn-primary btn-block" id="confirmDeposit">Confirm deposit</button>
     </div>
   </div>
 </div>
