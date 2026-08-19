@@ -356,6 +356,8 @@ table.data-table{ width:100%; min-width:620px; border-collapse: collapse; }
 .modal-overlay.show .modal{ transform: translateY(0) scale(1); }
 
 .auth-required-overlay{ position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(5,8,7,.78); backdrop-filter:blur(8px); }
+.auth-protected:not(.auth-checked) .app-shell{ visibility:hidden; }
+.auth-protected.auth-denied .app-shell{ visibility:hidden; }
 .auth-required-dialog{ width:min(380px, 100%); padding:28px; border:1px solid rgba(0,255,0,.35); border-radius:18px; background:var(--surface-1); box-shadow:0 20px 70px rgba(0,0,0,.55), 0 0 28px rgba(0,255,0,.12); text-align:center; }
 .auth-required-icon{ width:42px; height:42px; margin:0 auto 16px; display:flex; align-items:center; justify-content:center; border:1px solid #00ff00; border-radius:50%; color:#00ff00; font-size:24px; font-weight:700; }
 .auth-required-dialog h2{ color:#00ff00; font-size:21px; margin-bottom:8px; }

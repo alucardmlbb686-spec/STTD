@@ -115,9 +115,11 @@ const SC = (() => {
         console.error('Failed to load partial', name, e);
       }
     }));
-    if (['dashboard', 'browse', 'create', 'my-requests'].includes(document.body.dataset.page)
-      && typeof SCStore !== 'undefined' && !SCStore.isLoggedIn()) {
-      showLoginRequiredDialog();
+    const protectedPage = ['dashboard', 'browse', 'create', 'my-requests'].includes(document.body.dataset.page);
+    if (protectedPage) {
+      const loggedIn = typeof SCStore !== 'undefined' && SCStore.isLoggedIn();
+      document.body.classList.add(loggedIn ? 'auth-checked' : 'auth-denied');
+      if (!loggedIn) showLoginRequiredDialog();
     }
     document.dispatchEvent(new CustomEvent('partials:loaded'));
   }
