@@ -15,6 +15,15 @@ document.addEventListener('partials:loaded', () => {
     setTimeout(() => window.location.href = '/', 700);
   });
 
+  const requestedSection = new URLSearchParams(window.location.search).get('section');
+  if (requestedSection === 'wallet' || requestedSection === 'settings') {
+    document.querySelectorAll('.side-nav a[data-page]').forEach(link => {
+      link.classList.toggle('active', link.dataset.page === requestedSection);
+    });
+    renderAccountSection(requestedSection, user);
+    return;
+  }
+
   // ---- Skeleton loading, then render ----
   const statsGrid = document.getElementById('statsGrid');
   const activeList = document.getElementById('activeList');
@@ -109,4 +118,41 @@ document.addEventListener('partials:loaded', () => {
   function iconCheck(){ return '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.5"/><path d="M7 10.2l2 2 4-4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function iconStar(){ return '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M10 2l2.3 5.2 5.6.6-4.2 3.8 1.2 5.6L10 14.2 5.1 17.2l1.2-5.6-4.2-3.8 5.6-.6L10 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>'; }
   function iconCoin(){ return '<svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.2" stroke="currentColor" stroke-width="1.5"/><path d="M10 6.5v7M8 8.3h2.8a1.4 1.4 0 010 2.8H9M8 11.1h2.6a1.5 1.5 0 010 3H8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'; }
+
+  function renderAccountSection(section, user){
+    const pageBody = document.querySelector('.page-body');
+    if (section === 'wallet') {
+      const completed = SCStore.getMine().filter(request => request.status === 'completed');
+      const rewards = completed.reduce((total, request) => total + request.reward, 0);
+      pageBody.innerHTML = `
+        <div class="page-title-row"><div><h1>Wallet</h1><div class="sub">Track your available balance and request activity.</div></div><a href="/create-request.html" class="btn btn-primary">+ New request</a></div>
+        <div class="stats-grid">
+          <div class="card stat-card"><div class="stat-label">Available balance</div><div class="stat-value">${SC.fmtMoney(rewards)}</div><div class="stat-delta up">Rewards available</div></div>
+          <div class="card stat-card"><div class="stat-label">Total earned</div><div class="stat-value">${SC.fmtMoney(rewards)}</div><div class="stat-delta up">From completed requests</div></div>
+          <div class="card stat-card"><div class="stat-label">Completed requests</div><div class="stat-value">${completed.length}</div><div class="stat-delta up">All time</div></div>
+        </div>
+        <div class="card"><div class="panel-head"><h3>Wallet activity</h3><span class="pill-tag">${completed.length} completed</span></div>
+          ${completed.length ? completed.slice(0,8).map(request => `<div class="request-row"><div class="req-icon">${SC.methodIcon(request.method)}</div><div class="req-main"><div class="req-title">${request.id} reward</div><div class="req-meta">${SC.timeAgo(request.createdAt)}</div></div><div class="req-side"><div class="req-amt text-green">+${SC.fmtMoney(request.reward)}</div><span class="badge badge-completed">Completed</span></div></div>`).join('') : '<div class="empty-state"><h3>No wallet activity yet</h3><p>Completed request rewards will appear here.</p></div>'}
+        </div>`;
+      return;
+    }
+
+    pageBody.innerHTML = `
+      <div class="page-title-row"><div><h1>Settings</h1><div class="sub">Manage your account preferences.</div></div></div>
+      <div class="card" style="max-width:720px;"><div class="panel-head"><h3>Profile</h3></div>
+        <div class="form-row-split"><div class="field"><label for="settingsName">Full name</label><input class="input" id="settingsName" value="${user.name}"></div><div class="field"><label for="settingsEmail">Email address</label><input class="input" id="settingsEmail" type="email" value="${user.email}"></div></div>
+        <div class="divider"></div><label class="checkbox-row"><input type="checkbox" id="settingsAlerts" checked> Email notifications for request updates</label>
+        <label class="checkbox-row"><input type="checkbox" id="settingsOffers" checked> Notifications for matching requests</label>
+        <button class="btn btn-primary" id="saveSettings" style="margin-top:18px;">Save settings</button>
+      </div>`;
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      const name = document.getElementById('settingsName').value.trim();
+      const email = document.getElementById('settingsEmail').value.trim();
+      if (!name || !email) return SC.toast('Enter your name and email.', 'error');
+      SCStore.setUser({ name, email });
+      document.getElementById('sidebarUserName').textContent = name;
+      document.getElementById('sidebarAvatar').textContent = SC.initials(name);
+      SC.toast('Settings saved.', 'success');
+    });
+  }
 });
