@@ -124,15 +124,20 @@ document.addEventListener('partials:loaded', () => {
     if (section === 'wallet') {
       const completed = SCStore.getMine().filter(request => request.status === 'completed');
       const rewards = completed.reduce((total, request) => total + request.reward, 0);
+      const pendingRewards = SCStore.getMine().filter(request => ['accepted', 'payment_sent', 'verification'].includes(request.status)).reduce((total, request) => total + request.reward, 0);
       pageBody.innerHTML = `
-        <div class="page-title-row"><div><h1>Wallet</h1><div class="sub">Track your available balance and request activity.</div></div><a href="/create-request.html" class="btn btn-primary">+ New request</a></div>
-        <div class="stats-grid">
-          <div class="card stat-card"><div class="stat-label">Available balance</div><div class="stat-value">${SC.fmtMoney(rewards)}</div><div class="stat-delta up">Rewards available</div></div>
-          <div class="card stat-card"><div class="stat-label">Total earned</div><div class="stat-value">${SC.fmtMoney(rewards)}</div><div class="stat-delta up">From completed requests</div></div>
-          <div class="card stat-card"><div class="stat-label">Completed requests</div><div class="stat-value">${completed.length}</div><div class="stat-delta up">All time</div></div>
+        <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
+        <div class="wallet-balance-card">
+          <div><div class="wallet-eyebrow">Available balance</div><div class="wallet-balance">${SC.fmtMoney(rewards)}</div><div class="wallet-balance-note">Ready from completed requests</div></div>
+          <div class="wallet-balance-side"><span class="wallet-status-dot"></span><span>Wallet active</span><div class="wallet-balance-mark">$</div></div>
         </div>
-        <div class="card"><div class="panel-head"><h3>Wallet activity</h3><span class="pill-tag">${completed.length} completed</span></div>
-          ${completed.length ? completed.slice(0,8).map(request => `<div class="request-row"><div class="req-icon">${SC.methodIcon(request.method)}</div><div class="req-main"><div class="req-title">${request.id} reward</div><div class="req-meta">${SC.timeAgo(request.createdAt)}</div></div><div class="req-side"><div class="req-amt text-green">+${SC.fmtMoney(request.reward)}</div><span class="badge badge-completed">Completed</span></div></div>`).join('') : '<div class="empty-state"><h3>No wallet activity yet</h3><p>Completed request rewards will appear here.</p></div>'}
+        <div class="wallet-metrics">
+          <div class="card wallet-metric"><span class="wallet-metric-label">Total earned</span><strong>${SC.fmtMoney(rewards)}</strong><span class="wallet-metric-meta">Completed rewards</span></div>
+          <div class="card wallet-metric"><span class="wallet-metric-label">Pending rewards</span><strong>${SC.fmtMoney(pendingRewards)}</strong><span class="wallet-metric-meta">Awaiting completion</span></div>
+          <div class="card wallet-metric"><span class="wallet-metric-label">Completed requests</span><strong>${completed.length}</strong><span class="wallet-metric-meta">All time</span></div>
+        </div>
+        <div class="card wallet-activity-card"><div class="panel-head"><div><h3>Wallet activity</h3><div class="wallet-panel-sub">Recent completed reward deposits</div></div><span class="pill-tag">${completed.length} completed</span></div>
+          ${completed.length ? `<div class="wallet-ledger">${completed.slice(0,8).map(request => `<div class="wallet-ledger-row"><div class="wallet-ledger-icon">${SC.methodIcon(request.method)}</div><div class="req-main"><div class="req-title">Reward from ${request.id}</div><div class="req-meta">${SC.methodMeta(request.method).label} · ${SC.timeAgo(request.createdAt)}</div></div><div class="wallet-ledger-amount"><strong>+${SC.fmtMoney(request.reward)}</strong><span>Deposited</span></div></div>`).join('')}</div>` : '<div class="empty-state wallet-empty"><h3>No wallet activity yet</h3><p>Complete a request to receive rewards in your wallet.</p><a href="/browse-requests.html" class="btn btn-secondary btn-sm">Browse requests</a></div>'}
         </div>`;
       return;
     }
