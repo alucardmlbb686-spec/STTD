@@ -42,6 +42,7 @@ document.addEventListener('partials:loaded', () => {
     }
 
     await refresh();
+    window.setInterval(() => { if (!document.hidden) refresh(); }, 15000);
   }
 
   async function getFiltered(){

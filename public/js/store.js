@@ -4,7 +4,7 @@ const SCStore = (() => {
   let requestCache = [];
 
   async function api(path, options = {}){
-    const response = await fetch(path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
+    const response = await fetch(path, { cache: 'no-store', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
     const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Request failed');
     return payload;

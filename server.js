@@ -115,6 +115,7 @@ const requestSelect = `SELECT r.*, requester.full_name AS requester_name, reques
 
 app.get('/api/requests', requireUser, async (req, res, next) => {
   try{
+    res.set('Cache-Control', 'no-store');
     const params = [];
     let where = '';
     if (req.query.mine === '1'){ params.push(req.user.id); where = ` WHERE r.requester_id = $1 OR r.fulfiller_id = $1`; }
