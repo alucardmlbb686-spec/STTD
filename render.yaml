@@ -12,6 +12,12 @@ services:
         fromDatabase:
           name: starcurrency-db
           property: connectionString
+      - key: ADMIN_NAME
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
 
 databases:
   - name: starcurrency-db
