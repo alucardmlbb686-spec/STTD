@@ -44,14 +44,22 @@ async function query(text, values){
 function hashToken(token){ return crypto.createHash('sha256').update(token).digest('hex'); }
 function depositAddress(asset){
   const address = asset === 'BTC' ? process.env.ESCROW_BTC_ADDRESS : process.env.ESCROW_USDT_ADDRESS;
-  if (!address) throw new Error(`ESCROW_${asset}_ADDRESS is required before creating deposit requests`);
+  if (!address || address.startsWith('your-') || address.includes('PASTE_')) {
+    const error = new Error(`Set ESCROW_${asset}_ADDRESS in Render before creating ${asset} deposit requests`);
+    error.statusCode = 503;
+    throw error;
+  }
   return address;
 }
 function depositMemo(requestId){ return `SC-${requestId.replaceAll('-', '').slice(0, 16).toUpperCase()}`; }
 function assetAmount(asset, usdTotal){
   if (asset === 'USDT') return Number(usdTotal.toFixed(6));
   const rate = Number(process.env.BTC_USD_RATE);
-  if (!rate || rate <= 0) throw new Error('BTC_USD_RATE is required before creating BTC deposit requests');
+  if (!rate || rate <= 0) {
+    const error = new Error('Set BTC_USD_RATE in Render before creating BTC deposit requests');
+    error.statusCode = 503;
+    throw error;
+  }
   return Number((usdTotal / rate).toFixed(8));
 }
 function setSessionCookie(res, token){
@@ -429,6 +437,7 @@ app.use((req, res) => {
 app.use((error, req, res, next) => {
   console.error(error);
   if (error instanceof multer.MulterError || error.message === 'Unexpected field') return res.status(400).json({ error: 'Invalid proof upload. Use one PNG, JPG, JPEG, or WEBP file up to 8 MB.' });
+  if (error.statusCode) return res.status(error.statusCode).json({ error: error.message });
   res.status(error.code === '23505' ? 409 : 500).json({ error: 'Unexpected server error' });
 });
 
