@@ -45,11 +45,19 @@ const SCStore = (() => {
   }
 
   async function updateStatus(id, status){ return update(id, { status }); }
+  async function uploadProof(id, file){
+    const formData = new FormData();
+    formData.append('proof', file);
+    const response = await fetch(`/api/requests/${id}/payment-proof`, { method: 'POST', body: formData, credentials: 'same-origin', cache: 'no-store' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Payment proof upload failed');
+    return payload;
+  }
   async function updateProfile(profile){ const payload = await api('/api/auth/me', { method: 'PATCH', body: JSON.stringify(profile) }); currentUser = payload.user; return currentUser; }
   async function clearUser(){ await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); currentUser = null; requestCache = []; }
   function getUser(){ return currentUser || { name: '', email: '', completedRequests: 0 }; }
   function isLoggedIn(){ return Boolean(currentUser); }
   function setUser(user){ currentUser = user; }
 
-  return { api, refreshSession, getAll, getMine, add, update, updateStatus, updateProfile, getUser, isLoggedIn, setUser, clearUser };
+  return { api, refreshSession, getAll, getMine, add, update, updateStatus, uploadProof, updateProfile, getUser, isLoggedIn, setUser, clearUser };
 })();

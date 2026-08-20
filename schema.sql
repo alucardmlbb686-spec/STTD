@@ -105,3 +105,29 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 CREATE INDEX IF NOT EXISTS ledger_user_idx ON ledger_entries (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ledger_request_idx ON ledger_entries (request_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS deposit_addresses_lookup_idx ON deposit_addresses (address, memo, active);
+
+CREATE TABLE IF NOT EXISTS payment_proofs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  file_path TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL CHECK (mime_type IN ('image/png', 'image/jpeg', 'image/webp')),
+  file_size INTEGER NOT NULL CHECK (file_size > 0),
+  status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'approved', 'rejected')),
+  reviewed_by UUID REFERENCES users(id),
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS request_status_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  old_status TEXT,
+  new_status TEXT NOT NULL,
+  changed_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_proofs_one_submitted_idx ON payment_proofs (request_id) WHERE status = 'submitted';
+CREATE INDEX IF NOT EXISTS request_status_history_idx ON request_status_history (request_id, created_at DESC);

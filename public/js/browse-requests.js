@@ -175,6 +175,7 @@ document.addEventListener('partials:loaded', () => {
   function bindAcceptButtons(){
     SC.qsa('.proof-btn').forEach(btn => btn.addEventListener('click', () => {
       pendingId = btn.dataset.id;
+      document.getElementById('proofFile').value = '';
       document.getElementById('proofDetails').value = '';
       document.getElementById('proofModal').classList.add('show');
     }));
@@ -218,11 +219,13 @@ document.addEventListener('partials:loaded', () => {
   const proofModal = document.getElementById('proofModal');
   document.getElementById('proofCancel').addEventListener('click', () => proofModal.classList.remove('show'));
   document.getElementById('proofSubmit').addEventListener('click', async function(){
+    const file = document.getElementById('proofFile').files[0];
     const details = document.getElementById('proofDetails').value.trim();
-    if (!details){ SC.toast('Add payment proof details first.', 'error'); return; }
+    if (!file){ SC.toast('Choose a payment proof image first.', 'error'); return; }
+    if (file.size > 8 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)){ SC.toast('Use a PNG, JPG, JPEG, or WEBP image up to 8 MB.', 'error'); return; }
     SC.setLoading(this, true);
     try {
-      await SCStore.update(pendingId, { proof: { details } });
+      await SCStore.uploadProof(pendingId, file);
       proofModal.classList.remove('show');
       SC.toast(`${pendingId} is awaiting requester confirmation.`, 'success');
       await refresh();

@@ -16,11 +16,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@coinbase/coinbase-sdk": "^0.25.0",
     "bcryptjs": "^3.0.3",
     "express": "^4.22.2",
+    "express-rate-limit": "^8.6.2",
+    "multer": "^2.2.0",
     "pg": "^8.23.0"
   },
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   }
 }

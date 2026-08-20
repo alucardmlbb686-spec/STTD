@@ -3,11 +3,16 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
+const createWalletRouter = require('./routes/wallet');
+const coinbase = require('./services/coinbaseService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const PROOF_DIR = path.join(__dirname, 'uploads', 'proofs');
 const db = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -17,11 +22,19 @@ const db = process.env.DATABASE_URL
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(PUBLIC_DIR));
-
+fs.mkdirSync(PROOF_DIR, { recursive: true });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-8', legacyHeaders: false });
+const proofUpload = multer({
+  storage: multer.diskStorage({
+    destination: PROOF_DIR,
+    filename: (req, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => callback(null, ['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype)),
+});
 const SESSION_COOKIE = 'starcurrency_session';
 const SESSION_DAYS = 7;
 const allowedMethods = new Set(['venmo', 'paypal', 'zelle', 'cashapp']);
-const allowedStatuses = new Set(['draft', 'awaiting_deposit', 'deposit_confirming', 'open', 'accepted', 'in_progress', 'awaiting_confirmation', 'under_admin_review', 'completed', 'disputed', 'cancelled']);
 
 async function query(text, values){
   if (!db) throw new Error('DATABASE_URL is required for API access');
@@ -87,7 +100,7 @@ async function createSession(user, res){
   setSessionCookie(res, token);
 }
 
-app.post('/api/auth/register', async (req, res, next) => {
+app.post('/api/auth/register', authLimiter, async (req, res, next) => {
   try{
     const { name, email, password } = req.body;
     if (!name?.trim() || !/^\S+@\S+\.\S+$/.test(email || '') || !password || password.length < 8) return res.status(400).json({ error: 'Name, valid email, and an 8+ character password are required' });
@@ -98,7 +111,7 @@ app.post('/api/auth/register', async (req, res, next) => {
   }catch(error){ if (error.code === '23505') return res.status(409).json({ error: 'An account with that email already exists' }); next(error); }
 });
 
-app.post('/api/auth/login', async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, async (req, res, next) => {
   try{
     const result = await query('SELECT * FROM users WHERE email = lower($1)', [req.body.email?.trim()]);
     const user = result.rows[0];
@@ -126,6 +139,8 @@ app.patch('/api/auth/me', requireUser, async (req, res, next) => {
 });
 
 const requestSelect = `SELECT r.*, requester.full_name AS requester_name, requester.completed_requests AS requester_completed_requests, fulfiller.full_name AS fulfiller_name FROM requests r JOIN users requester ON requester.id = r.requester_id LEFT JOIN users fulfiller ON fulfiller.id = r.fulfiller_id`;
+
+app.use('/api/wallet', createWalletRouter({ requireUser, requireAdmin, query: (...args) => query(...args) }));
 
 app.get('/api/requests', requireUser, async (req, res, next) => {
   try{
@@ -204,7 +219,39 @@ app.post('/api/requests/:id/accept', requireUser, async (req, res, next) => {
     if (!req.body.walletAddress?.trim()) return res.status(400).json({ error: 'Your BTC or USDT payout wallet address is required' });
     const result = await query(`UPDATE requests SET fulfiller_id = $1, fulfiller_wallet = $2, status = 'accepted' WHERE id = $3 AND status = 'open' AND deposit_status = 'confirmed' AND requester_id <> $1 RETURNING id`, [req.user.id, req.body.walletAddress.trim(), req.params.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is no longer available' });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'open', 'accepted', $2)`, [req.params.id, req.user.id]);
     res.json({ status: 'accepted' });
+  }catch(error){ next(error); }
+});
+
+function validImageSignature(filePath, mimeType){
+  const bytes = fs.readFileSync(filePath);
+  if (mimeType === 'image/png') return bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+  if (mimeType === 'image/jpeg') return bytes.subarray(0, 3).equals(Buffer.from([255,216,255]));
+  if (mimeType === 'image/webp') return bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP';
+  return false;
+}
+
+app.post('/api/requests/:id/payment-proof', requireUser, proofUpload.single('proof'), async (req, res, next) => {
+  try{
+    if (!req.file) return res.status(400).json({ error: 'A PNG, JPG, JPEG, or WEBP proof image is required' });
+    if (!validImageSignature(req.file.path, req.file.mimetype)) { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Uploaded file content does not match a supported image type' }); }
+    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'awaiting_confirmation' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','in_progress') RETURNING id`, [req.file.filename, req.params.id, req.user.id]);
+    if (!result.rows[0]) { fs.unlinkSync(req.file.path); return res.status(409).json({ error: 'Only the accepted fulfiller can submit proof for an in-progress request' }); }
+    await query(`INSERT INTO payment_proofs (request_id, user_id, file_path, file_name, mime_type, file_size) VALUES ($1,$2,$3,$4,$5,$6)`, [req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size]);
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'accepted', 'awaiting_confirmation', $2)`, [req.params.id, req.user.id]);
+    res.status(201).json({ status: 'awaiting_confirmation', proof: { fileName: req.file.originalname, uploadedAt: new Date().toISOString() } });
+  }catch(error){ if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); next(error); }
+});
+
+app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) => {
+  try{
+    const result = await query(`SELECT pp.file_path, pp.file_name, r.requester_id, r.fulfiller_id FROM payment_proofs pp JOIN requests r ON r.id = pp.request_id WHERE pp.request_id = $1 ORDER BY pp.created_at DESC LIMIT 1`, [req.params.id]);
+    const proof = result.rows[0];
+    if (!proof || (req.user.id !== proof.requester_id && req.user.id !== proof.fulfiller_id && req.user.role !== 'admin')) return res.status(404).json({ error: 'Payment proof not found' });
+    const filePath = path.join(PROOF_DIR, path.basename(proof.file_path));
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Payment proof file unavailable' });
+    res.type(path.extname(filePath)).sendFile(filePath);
   }catch(error){ next(error); }
 });
 
@@ -243,11 +290,37 @@ app.post('/api/requests/:id/cancel', requireUser, async (req, res, next) => {
 app.get('/api/admin/requests', requireUser, requireAdmin, async (req, res, next) => {
   try{ const result = await query(`${requestSelect} ORDER BY r.created_at DESC`); res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)) }); }catch(error){ next(error); }
 });
-app.get('/api/wallet', requireUser, async (req, res, next) => {
+app.get('/api/admin/requests/review', requireUser, requireAdmin, async (req, res, next) => {
   try{
-    const wallets = await query(`SELECT asset, available_balance, locked_balance FROM wallets WHERE user_id = $1 ORDER BY asset`, [req.user.id]);
-    const ledger = await query(`SELECT id, request_id, asset, entry_type, amount, tx_hash, status, confirmations, metadata, created_at FROM ledger_entries WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`, [req.user.id]);
-    res.json({ wallets: wallets.rows, ledger: ledger.rows });
+    const result = await query(`${requestSelect} WHERE r.status IN ('awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
+    const proofs = await query(`SELECT id, request_id, file_path, file_name, mime_type, file_size, status, created_at FROM payment_proofs WHERE status = 'submitted' ORDER BY created_at ASC`);
+    res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)), proofs: proofs.rows });
+  }catch(error){ next(error); }
+});
+app.post('/api/admin/requests/:id/approve', requireUser, requireAdmin, async (req, res, next) => {
+  try{
+    const client = await db.connect();
+    try{
+      await client.query('BEGIN');
+      const result = await client.query(`SELECT r.*, pp.id AS proof_id FROM requests r JOIN payment_proofs pp ON pp.request_id = r.id AND pp.status = 'submitted' WHERE r.id = $1 AND r.status = 'awaiting_confirmation' FOR UPDATE`, [req.params.id]);
+      if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request must have submitted proof and be awaiting review' }); }
+      const row = result.rows[0];
+      // Coinbase Base Sepolia developer wallets support test ETH/USDC transfers. BTC/USDT requests use the PostgreSQL escrow ledger until a custody/network adapter is configured.
+      await client.query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1`, [row.id]);
+      await client.query(`UPDATE payment_proofs SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2`, [req.user.id, row.proof_id]);
+      await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'awaiting_confirmation', 'under_admin_review', $2)`, [row.id, req.user.id]);
+      await client.query('COMMIT');
+      res.json({ status: 'under_admin_review', release: 'Use the existing admin release endpoint after review.' });
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  }catch(error){ next(error); }
+});
+app.post('/api/admin/requests/:id/reject', requireUser, requireAdmin, async (req, res, next) => {
+  try{
+    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1 WHERE id = $2 AND status IN ('awaiting_confirmation','under_admin_review') RETURNING id`, [req.body.reason?.trim() || 'Payment proof rejected by admin', req.params.id]);
+    if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting admin review' });
+    await query(`UPDATE payment_proofs SET status = 'rejected', reviewed_by = $1, reviewed_at = now() WHERE request_id = $2 AND status = 'submitted'`, [req.user.id, req.params.id]);
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'under_review', 'disputed', $2)`, [req.params.id, req.user.id]);
+    res.json({ status: 'disputed' });
   }catch(error){ next(error); }
 });
 app.post('/api/admin/deposits/:id/confirm', requireUser, requireAdmin, async (req, res, next) => {
@@ -277,14 +350,27 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();
     if (!destination) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Fulfiller withdrawal address is required' }); }
+    let externalTransactionId = null;
+    let settlementMode = 'ledger_only_simulation';
+    if (coinbase.releaseConfigured() && row.escrow_asset === 'USDT') {
+      const transfer = await coinbase.transfer({
+        walletId: process.env.COINBASE_RELEASE_WALLET_ID,
+        assetId: process.env.COINBASE_RELEASE_ASSET_ID,
+        amount: Number(row.amount) + Number(row.reward),
+        destination,
+        gasless: process.env.COINBASE_RELEASE_GASLESS === 'true',
+      });
+      externalTransactionId = transfer.transfer;
+      settlementMode = 'coinbase_base_sepolia_test_transfer';
+    }
     await client.query(`UPDATE requests SET status = 'completed', released_at = now(), released_by = $1 WHERE id = $2`, [req.user.id, req.params.id]);
     const releaseAmount = assetAmount(row.escrow_asset, Number(row.amount) + Number(row.reward));
     await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [row.deposit_amount, row.requester_id, row.escrow_asset]);
-    await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount) VALUES ($1,$2,$3,$4,$5)`, [row.id, row.fulfiller_id, row.escrow_asset, destination, releaseAmount]);
-    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,'completed',$5)`, [row.requester_id, row.id, row.escrow_asset, releaseAmount, JSON.stringify({ releasedBy: req.user.id })]);
-    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, status, metadata) VALUES ($1,$2,$3,'withdrawal',$4,'pending',$5)`, [row.fulfiller_id, row.id, row.escrow_asset, releaseAmount, JSON.stringify({ destinationAddress: destination })]);
+    await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $6 IS NULL THEN NULL ELSE now() END)`, [row.id, row.fulfiller_id, row.escrow_asset, destination, releaseAmount, externalTransactionId, externalTransactionId ? 'confirmed' : 'pending']);
+    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6)`, [row.requester_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, JSON.stringify({ releasedBy: req.user.id, settlementMode })]);
+    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'withdrawal',$4,$5,$6,$7)`, [row.fulfiller_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, externalTransactionId ? 'completed' : 'pending', JSON.stringify({ destinationAddress: destination, settlementMode })]);
     await client.query('COMMIT');
-    res.json({ status: 'completed', withdrawalStatus: 'pending' });
+    res.json({ status: 'completed', withdrawalStatus: externalTransactionId ? 'confirmed' : 'pending', settlementMode, externalTransactionId });
   }catch(error){ await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 app.post('/api/admin/withdrawals/:id/confirm', requireUser, requireAdmin, async (req, res, next) => {
@@ -307,8 +393,8 @@ app.get('/health', async (req, res) => {
   if (!db) return res.json({ ok: true, database: 'not configured' });
   try {
     await db.query('SELECT 1');
-    const tables = await db.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users', 'sessions', 'requests') ORDER BY table_name`);
-    const requiredTables = ['requests', 'sessions', 'users'];
+    const requiredTables = ['deposit_addresses', 'ledger_entries', 'payment_proofs', 'request_status_history', 'requests', 'sessions', 'users', 'wallets', 'withdrawals'];
+    const tables = await db.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1::text[]) ORDER BY table_name`, [requiredTables]);
     const ready = requiredTables.every(table => tables.rows.some(row => row.table_name === table));
     res.status(ready ? 200 : 503).json({ ok: ready, database: 'connected', tables: tables.rows.map(row => row.table_name), message: ready ? 'schema ready' : 'schema incomplete' });
   } catch (error) {
@@ -353,6 +439,7 @@ app.use((req, res) => {
 
 app.use((error, req, res, next) => {
   console.error(error);
+  if (error instanceof multer.MulterError || error.message === 'Unexpected field') return res.status(400).json({ error: 'Invalid proof upload. Use one PNG, JPG, JPEG, or WEBP file up to 8 MB.' });
   res.status(error.code === '23505' ? 409 : 500).json({ error: 'Unexpected server error' });
 });
 
