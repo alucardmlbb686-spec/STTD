@@ -21,13 +21,13 @@ document.addEventListener('partials:loaded', () => {
   async function render(){
     const all = (await SCStore.getMine()).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     document.getElementById('cAll').textContent = all.length;
-    document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status)).length;
-    document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
+    document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status)).length;
+    document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
     document.getElementById('cCompleted').textContent = all.filter(r => r.status === 'completed').length;
     document.getElementById('cCancelled').textContent = all.filter(r => r.status === 'cancelled').length;
 
     let data = all;
-    if (activeTab === 'open') data = all.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status));
+    if (activeTab === 'open') data = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status));
     else if (activeTab !== 'all') data = all.filter(r => r.status === activeTab);
 
     if (!data.length){
@@ -122,8 +122,8 @@ document.addEventListener('partials:loaded', () => {
     `;
     const cancelBtn = document.getElementById('detailCancelReq');
     cancelBtn.style.display = ['awaiting_deposit','deposit_confirming','open'].includes(r.status) ? 'inline-flex' : 'none';
-    document.getElementById('detailConfirmReq').style.display = r.status === 'awaiting_confirmation' ? 'inline-flex' : 'none';
-    document.getElementById('detailDisputeReq').style.display = ['awaiting_confirmation','under_admin_review'].includes(r.status) ? 'inline-flex' : 'none';
+    document.getElementById('detailConfirmReq').style.display = r.status === 'payment_proof_submitted' || r.status === 'awaiting_confirmation' ? 'inline-flex' : 'none';
+    document.getElementById('detailDisputeReq').style.display = ['payment_proof_submitted','confirmed','awaiting_confirmation','under_admin_review'].includes(r.status) ? 'inline-flex' : 'none';
     detailModal.classList.add('show');
   }
 

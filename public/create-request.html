@@ -96,7 +96,7 @@
               </div>
             </fieldset>
           </div>
-          <div class="card escrow-card"><fieldset><legend>Crypto escrow deposit</legend><p class="hint">Deposit the total into the platform BTC or USDT escrow wallet before your request becomes Open.</p><div class="form-row-split"><div class="field"><label for="escrowAsset">Escrow asset</label><select class="input" id="escrowAsset"><option>USDT</option><option>BTC</option></select></div><div class="field"><label for="escrowWallet">Escrow wallet</label><input class="input mono" id="escrowWallet" value="Platform escrow wallet" readonly></div></div><div class="escrow-notice"><strong id="escrowTotal">Total deposit: $0.00</strong><span>Status: Awaiting Deposit</span></div></fieldset></div>
+          <div class="card escrow-card"><fieldset><legend>Crypto escrow deposit</legend><p class="hint" id="escrowHint">Sandbox funding uses the configured Coinbase CDP test account. No real deposit address is required.</p><div class="form-row-split"><div class="field"><label for="escrowAsset">Escrow asset</label><select class="input" id="escrowAsset"><option>USDC</option><option>USDT</option></select></div><div class="field"><label for="escrowWallet">Funding source</label><input class="input mono" id="escrowWallet" value="Coinbase CDP Sandbox" readonly></div></div><div class="escrow-notice"><strong id="escrowTotal">Total deposit: $0.00</strong><span>Status: Awaiting Deposit</span></div></fieldset></div>
         </div>
 
         <aside class="card summary-card">
@@ -127,12 +127,11 @@
       <svg width="24" height="24" viewBox="0 0 20 20" fill="none"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
       <h3 style="margin-bottom:8px;">Request created</h3>
-    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Submit the escrow transaction hash before this request can appear in Browse Requests.</p>
-    <div class="card" style="text-align:left; margin-bottom:18px; padding:14px;"><div class="hint">Send the exact total to this request-specific escrow destination.</div><div class="kv-row"><span class="k">Deposit address</span><span class="v mono" id="depositAddress">—</span></div><div class="kv-row"><span class="k">Memo</span><span class="v mono" id="depositMemo">—</span></div></div>
-    <div class="field" style="text-align:left; margin-bottom:18px;"><label for="depositTxHash">Blockchain transaction hash</label><input class="input mono" id="depositTxHash" placeholder="Paste the BTC or USDT transaction hash"></div>
+    <p style="font-size:13.5px; margin-bottom:22px;" id="successSub">Complete the supported escrow funding step before this request can appear in Find Requests.</p>
+    <div class="card" style="text-align:left; margin-bottom:18px; padding:14px;"><div class="hint" id="fundingInstructions">This is a sandbox test funding action. No real blockchain transaction will be created.</div><div class="kv-row"><span class="k">CDP account</span><span class="v mono" id="depositAddress">—</span></div><div class="kv-row"><span class="k">Funding asset</span><span class="v mono" id="depositMemo">—</span></div></div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-secondary btn-block" id="depositLater">Deposit later</button>
-      <button class="btn btn-primary btn-block" id="confirmDeposit">Submit deposit proof</button>
+      <button class="btn btn-primary btn-block" id="confirmDeposit">Simulate sandbox funding</button>
     </div>
   </div>
 </div>

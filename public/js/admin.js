@@ -103,7 +103,7 @@ document.addEventListener('partials:loaded', async () => {
         <td>${SC.statusBadge(r.status)}</td>
         <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
         <td><div class="table-actions">
-          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : r.status === 'under_admin_review' ? 'Release escrow' : 'Review'}</button>
+          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : ['confirmed','under_admin_review'].includes(r.status) ? 'Release escrow' : 'Review'}</button>
         </div></td>
       </tr>
     `).join('');

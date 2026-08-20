@@ -18,12 +18,16 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: ESCROW_BTC_ADDRESS
+      - key: CDP_API_KEY_ID
         sync: false
-      - key: ESCROW_USDT_ADDRESS
+      - key: CDP_API_KEY_SECRET
         sync: false
-      - key: BTC_USD_RATE
+      - key: CDP_ACCOUNT_ID
         sync: false
+      - key: COINBASE_ENV
+        value: sandbox
+      - key: ESCROW_MODE
+        value: sandbox
       - key: BLOCKCHAIN_WEBHOOK_SECRET
         sync: false
       - key: CDP_API_KEY_ID

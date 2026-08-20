@@ -165,17 +165,21 @@ document.addEventListener('partials:loaded', () => {
       createdRequest = await SCStore.add({ method: selectedMethod, recipientName: recipientName.value.trim(), recipient: recipientValue, amount, reward, reason: document.getElementById('reason').value.trim(), dueAt: document.getElementById('dueAt').value, note: document.getElementById('note').value || '', escrowAsset: document.getElementById('escrowAsset').value });
       SC.setLoading(btn, false);
 
-      document.getElementById('successSub').textContent = `${createdRequest.id} is Awaiting Deposit. Submit the ${createdRequest.escrowAsset} transaction hash after sending ${SC.fmtMoney(createdRequest.total)}.`;
-      document.getElementById('depositAddress').textContent = createdRequest.depositAddress ? `${createdRequest.depositAddress} (${createdRequest.depositAmount} ${createdRequest.escrowAsset})` : 'Unavailable';
-      document.getElementById('depositMemo').textContent = createdRequest.depositMemo || 'No memo required';
+      const sandbox = createdRequest.escrowMode === 'sandbox';
+      document.getElementById('successSub').textContent = sandbox ? `${createdRequest.id} is Awaiting Deposit. Simulate funding from the Coinbase CDP sandbox account.` : `${createdRequest.id} is Awaiting Deposit. Submit the ${createdRequest.escrowAsset} transaction hash after funding.`;
+      document.getElementById('depositAddress').textContent = sandbox ? (createdRequest.cdpAccountId || 'Configured CDP account') : (createdRequest.depositAddress || 'Unavailable');
+      document.getElementById('depositMemo').textContent = sandbox ? createdRequest.escrowAsset : (createdRequest.depositMemo || 'No memo required');
+      document.getElementById('fundingInstructions').textContent = sandbox ? 'Sandbox simulation only. No real blockchain transaction will be created.' : 'Send the exact total to the configured escrow destination.';
+      document.getElementById('confirmDeposit').textContent = sandbox ? 'Simulate sandbox funding' : 'Submit deposit proof';
       document.getElementById('successModal').classList.add('show');
     } catch (error) { SC.setLoading(btn, false); SC.toast(error.message, 'error'); }
   });
 
   document.getElementById('confirmDeposit').addEventListener('click', () => {
-    const txHash = document.getElementById('depositTxHash').value.trim();
-    if (!createdRequest || !txHash) { SC.toast('Enter the blockchain transaction hash first.', 'error'); return; }
-    SCStore.update(createdRequest.id, { txHash }).then(() => { window.location.href = '/my-requests.html'; }).catch(error => SC.toast(error.message, 'error'));
+    if (!createdRequest) return;
+    const changes = createdRequest.escrowMode === 'sandbox' ? { sandboxFund: true } : { txHash: document.getElementById('depositTxHash').value.trim() };
+    if (!changes.sandboxFund && !changes.txHash) { SC.toast('Enter the blockchain transaction hash first.', 'error'); return; }
+    SCStore.update(createdRequest.id, changes).then(() => { window.location.href = '/my-requests.html'; }).catch(error => SC.toast(error.message, 'error'));
   });
   document.getElementById('depositLater').addEventListener('click', () => { window.location.href = '/my-requests.html'; });
 });

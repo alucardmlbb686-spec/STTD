@@ -52,7 +52,10 @@ async function query(text, values){
 }
 
 function hashToken(token){ return crypto.createHash('sha256').update(token).digest('hex'); }
+function isSandbox(){ return process.env.ESCROW_MODE === 'sandbox'; }
+function sandboxAssets(){ return ['USDC', 'USDT']; }
 function depositAddress(asset){
+  if (isSandbox()) return null;
   const address = asset === 'BTC' ? process.env.ESCROW_BTC_ADDRESS : process.env.ESCROW_USDT_ADDRESS;
   if (!address || address.startsWith('your-') || address.includes('PASTE_')) {
     const error = new Error(`Set ESCROW_${asset}_ADDRESS in Render before creating ${asset} deposit requests`);
@@ -63,7 +66,7 @@ function depositAddress(asset){
 }
 function depositMemo(requestId){ return `SC-${requestId.replaceAll('-', '').slice(0, 16).toUpperCase()}`; }
 function assetAmount(asset, usdTotal){
-  if (asset === 'USDT') return Number(usdTotal.toFixed(6));
+  if (asset === 'USDT' || asset === 'USDC') return Number(usdTotal.toFixed(6));
   const rate = Number(process.env.BTC_USD_RATE);
   if (!rate || rate <= 0) {
     const error = new Error('Set BTC_USD_RATE in Render before creating BTC deposit requests');
@@ -88,6 +91,7 @@ function publicRequest(row, viewerId, viewerRole){
     recipient: canViewPrivate ? row.recipient_contact : 'Hidden until acceptance',
     method: row.method, amount: Number(row.amount), reward: Number(row.reward), fee: Number(row.fee), total: Number(row.total),
     reason: row.reason, dueAt: row.due_at, note: row.note, escrowAsset: row.escrow_asset, escrowTxHash: canViewPrivate ? row.escrow_tx_hash : undefined,
+    escrowMode: row.escrow_mode, cdpAccountId: canViewPrivate ? row.cdp_account_id : undefined, cdpTransactionId: canViewPrivate ? row.cdp_transaction_id : undefined,
     depositAddress: canViewPrivate ? row.deposit_address : undefined, depositMemo: canViewPrivate ? row.deposit_memo : undefined, depositAmount: canViewPrivate ? Number(row.deposit_amount || 0) : undefined,
     requiredConfirmations: row.required_confirmations, confirmations: row.confirmations,
     depositStatus: row.deposit_status, status: row.status, proof: row.proof_details ? { details: row.proof_details, submittedAt: row.proof_submitted_at } : null,
@@ -185,26 +189,45 @@ app.post('/api/requests', requireUser, async (req, res, next) => {
   try{
     const { method, recipientName, recipient, amount, reward, reason, dueAt, note, escrowAsset } = req.body;
     const amountNumber = Number(amount); const rewardNumber = Number(reward || 0); const fee = Math.round((amountNumber + rewardNumber) * 0.025 * 100) / 100;
-    if (!allowedMethods.has(method) || !recipientName?.trim() || !recipient?.trim() || !amountNumber || amountNumber <= 0 || rewardNumber < 0 || !reason?.trim() || !dueAt || !['BTC','USDT'].includes(escrowAsset)) return res.status(400).json({ error: 'Complete all request fields with valid values' });
+    const allowedAssets = isSandbox() ? sandboxAssets() : ['BTC', 'USDT'];
+    if (!allowedMethods.has(method) || !recipientName?.trim() || !recipient?.trim() || !amountNumber || amountNumber <= 0 || rewardNumber < 0 || !reason?.trim() || !dueAt || !allowedAssets.includes(escrowAsset)) return res.status(400).json({ error: `Complete all request fields. Supported escrow assets: ${allowedAssets.join(', ')}` });
     const client = await db.connect();
     let result;
     try {
       await client.query('BEGIN');
-      result = await client.query(`INSERT INTO requests (requester_id, method, recipient_name, recipient_contact, amount, reward, fee, total, reason, due_at, note, escrow_asset) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, [req.user.id, method, recipientName.trim(), recipient.trim(), amountNumber, rewardNumber, fee, amountNumber + rewardNumber + fee, reason.trim(), dueAt, note?.trim() || null, escrowAsset]);
+      result = await client.query(`INSERT INTO requests (requester_id, method, recipient_name, recipient_contact, amount, reward, fee, total, reason, due_at, note, escrow_asset, escrow_mode, cdp_account_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, [req.user.id, method, recipientName.trim(), recipient.trim(), amountNumber, rewardNumber, fee, amountNumber + rewardNumber + fee, reason.trim(), dueAt, note?.trim() || null, escrowAsset, isSandbox() ? 'sandbox' : 'real', isSandbox() ? process.env.CDP_ACCOUNT_ID : null]);
       const id = result.rows[0].id;
       const address = depositAddress(escrowAsset); const memo = depositMemo(id);
       const depositAmount = assetAmount(escrowAsset, amountNumber + rewardNumber + fee);
       await client.query('UPDATE requests SET deposit_address = $1, deposit_memo = $2, deposit_amount = $3 WHERE id = $4', [address, memo, depositAmount, id]);
-      await client.query('INSERT INTO deposit_addresses (user_id, request_id, asset, address, memo) VALUES ($1,$2,$3,$4,$5)', [req.user.id, id, escrowAsset, address, memo]);
+      if (!isSandbox()) await client.query('INSERT INTO deposit_addresses (user_id, request_id, asset, address, memo) VALUES ($1,$2,$3,$4,$5)', [req.user.id, id, escrowAsset, address, memo]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
     const created = await query(`${requestSelect} WHERE r.id = $1`, [result.rows[0].id]);
-    res.status(201).json({ request: { ...publicRequest(created.rows[0], req.user.id), depositAddress: created.rows[0].deposit_address, depositMemo: created.rows[0].deposit_memo, requiredConfirmations: created.rows[0].required_confirmations, confirmations: created.rows[0].confirmations } });
+    res.status(201).json({ request: { ...publicRequest(created.rows[0], req.user.id), escrowMode: created.rows[0].escrow_mode, cdpAccountId: created.rows[0].cdp_account_id, depositAddress: created.rows[0].deposit_address, depositMemo: created.rows[0].deposit_memo, requiredConfirmations: created.rows[0].required_confirmations, confirmations: created.rows[0].confirmations, supportedAssets: isSandbox() ? sandboxAssets() : ['BTC', 'USDT'] } });
   }catch(error){ next(error); }
 });
 
 app.post('/api/requests/:id/deposit', requireUser, async (req, res, next) => {
   try{
+    if (isSandbox()) {
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query(`SELECT * FROM requests WHERE id = $1 AND requester_id = $2 AND status = 'awaiting_deposit' FOR UPDATE`, [req.params.id, req.user.id]);
+        if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request is not awaiting sandbox funding' }); }
+        const row = result.rows[0];
+        const cdpTransactionId = `sandbox_cdp_${crypto.randomUUID()}`;
+        await client.query(`UPDATE requests SET status = 'funded', deposit_status = 'confirmed', confirmations = required_confirmations, cdp_transaction_id = $1 WHERE id = $2`, [cdpTransactionId, row.id]);
+        await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, amount, entry_type, status, confirmations, metadata) VALUES ($1,$2,$3,$4,'deposit','confirmed',$5,$6)`, [row.requester_id, row.id, row.escrow_asset, row.deposit_amount, row.required_confirmations, JSON.stringify({ mode: 'sandbox', cdpAccountId: process.env.CDP_ACCOUNT_ID, simulated: true })]);
+        await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, amount, entry_type, status, confirmations, metadata) VALUES ($1,$2,$3,$4,'escrow_lock','confirmed',$5,$6)`, [row.requester_id, row.id, row.escrow_asset, row.deposit_amount, row.required_confirmations, JSON.stringify({ mode: 'sandbox', cdpTransactionId })]);
+        await client.query(`INSERT INTO wallets (user_id, asset, locked_balance) VALUES ($1,$2,$3) ON CONFLICT (user_id, asset) DO UPDATE SET locked_balance = wallets.locked_balance + EXCLUDED.locked_balance`, [row.requester_id, row.escrow_asset, row.deposit_amount]);
+        await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1,'awaiting_deposit','funded',$2),($1,'funded','open',$2)`, [row.id, req.user.id]);
+        await client.query(`UPDATE requests SET status = 'open' WHERE id = $1`, [row.id]);
+        await client.query('COMMIT');
+        return res.json({ status: 'open', fundingStatus: 'funded', simulated: true, cdpAccountId: process.env.CDP_ACCOUNT_ID, cdpTransactionId });
+      } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    }
     if (!req.body.txHash?.trim()) return res.status(400).json({ error: 'A blockchain transaction hash is required' });
     const result = await query(`UPDATE requests SET escrow_tx_hash = $1, deposit_status = 'confirming', status = 'deposit_confirming' WHERE id = $2 AND requester_id = $3 AND status = 'awaiting_deposit' RETURNING id, escrow_asset, total`, [req.body.txHash.trim(), req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request cannot accept a deposit in its current state' });
@@ -244,10 +267,10 @@ app.post('/api/webhooks/blockchain', async (req, res, next) => {
 app.post('/api/requests/:id/accept', requireUser, async (req, res, next) => {
   try{
     if (!req.body.walletAddress?.trim()) return res.status(400).json({ error: 'Your BTC or USDT payout wallet address is required' });
-    const result = await query(`UPDATE requests SET fulfiller_id = $1, fulfiller_wallet = $2, status = 'accepted' WHERE id = $3 AND status = 'open' AND deposit_status = 'confirmed' AND requester_id <> $1 RETURNING id`, [req.user.id, req.body.walletAddress.trim(), req.params.id]);
+    const result = await query(`UPDATE requests SET fulfiller_id = $1, fulfiller_wallet = $2, status = 'payment_pending' WHERE id = $3 AND status = 'open' AND deposit_status = 'confirmed' AND requester_id <> $1 RETURNING id`, [req.user.id, req.body.walletAddress.trim(), req.params.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is no longer available' });
-    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'open', 'accepted', $2)`, [req.params.id, req.user.id]);
-    res.json({ status: 'accepted' });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'open', 'accepted', $2),($1, 'accepted', 'payment_pending', $2)`, [req.params.id, req.user.id]);
+    res.json({ status: 'payment_pending' });
   }catch(error){ next(error); }
 });
 
@@ -263,11 +286,11 @@ app.post('/api/requests/:id/payment-proof', requireUser, proofUpload.single('pro
   try{
     if (!req.file) return res.status(400).json({ error: 'A PNG, JPG, JPEG, or WEBP proof image is required' });
     if (!validImageSignature(req.file.path, req.file.mimetype)) { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Uploaded file content does not match a supported image type' }); }
-    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'awaiting_confirmation' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','in_progress') RETURNING id`, [req.file.filename, req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'payment_proof_submitted' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','payment_pending','in_progress') RETURNING id`, [req.file.filename, req.params.id, req.user.id]);
     if (!result.rows[0]) { fs.unlinkSync(req.file.path); return res.status(409).json({ error: 'Only the accepted fulfiller can submit proof for an in-progress request' }); }
     await query(`INSERT INTO payment_proofs (request_id, user_id, file_path, file_name, mime_type, file_size) VALUES ($1,$2,$3,$4,$5,$6)`, [req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size]);
-    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'accepted', 'awaiting_confirmation', $2)`, [req.params.id, req.user.id]);
-    res.status(201).json({ status: 'awaiting_confirmation', proof: { fileName: req.file.originalname, uploadedAt: new Date().toISOString() } });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_pending', 'payment_proof_submitted', $2)`, [req.params.id, req.user.id]);
+    res.status(201).json({ status: 'payment_proof_submitted', proof: { fileName: req.file.originalname, uploadedAt: new Date().toISOString() } });
   }catch(error){ if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); next(error); }
 });
 
@@ -329,17 +352,18 @@ app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) =
 
 app.post('/api/requests/:id/proof', requireUser, async (req, res, next) => {
   try{
-    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'awaiting_confirmation' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','in_progress') RETURNING id`, [req.body.details?.trim(), req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'payment_proof_submitted' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','payment_pending','in_progress') RETURNING id`, [req.body.details?.trim(), req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Proof cannot be submitted in this state' });
-    res.json({ status: 'awaiting_confirmation' });
+    res.json({ status: 'payment_proof_submitted' });
   }catch(error){ next(error); }
 });
 
 app.post('/api/requests/:id/confirm', requireUser, async (req, res, next) => {
   try{
-    const result = await query(`UPDATE requests SET status = 'under_admin_review', completed_at = now() WHERE id = $1 AND requester_id = $2 AND status = 'awaiting_confirmation' RETURNING id`, [req.params.id, req.user.id]);
-    if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting confirmation' });
-    res.json({ status: 'under_admin_review' });
+    const result = await query(`UPDATE requests SET status = 'confirmed', completed_at = now() WHERE id = $1 AND requester_id = $2 AND status = 'payment_proof_submitted' RETURNING id`, [req.params.id, req.user.id]);
+    if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting payment confirmation' });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'confirmed', $2)`, [req.params.id, req.user.id]);
+    res.json({ status: 'confirmed' });
   }catch(error){ next(error); }
 });
 
@@ -364,7 +388,7 @@ app.get('/api/admin/requests', requireUser, requireAdmin, async (req, res, next)
 });
 app.get('/api/admin/requests/review', requireUser, requireAdmin, async (req, res, next) => {
   try{
-    const result = await query(`${requestSelect} WHERE r.status IN ('awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
+    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','confirmed','awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
     const proofs = await query(`SELECT id, request_id, file_path, file_name, mime_type, file_size, status, created_at FROM payment_proofs WHERE status = 'submitted' ORDER BY created_at ASC`);
     res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)), proofs: proofs.rows });
   }catch(error){ next(error); }
@@ -374,15 +398,15 @@ app.post('/api/admin/requests/:id/approve', requireUser, requireAdmin, async (re
     const client = await db.connect();
     try{
       await client.query('BEGIN');
-      const result = await client.query(`SELECT r.*, pp.id AS proof_id FROM requests r JOIN payment_proofs pp ON pp.request_id = r.id AND pp.status = 'submitted' WHERE r.id = $1 AND r.status = 'awaiting_confirmation' FOR UPDATE`, [req.params.id]);
-      if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request must have submitted proof and be awaiting review' }); }
+      const result = await client.query(`SELECT r.*, pp.id AS proof_id FROM requests r JOIN payment_proofs pp ON pp.request_id = r.id AND pp.status = 'submitted' WHERE r.id = $1 AND r.status IN ('payment_proof_submitted','confirmed') FOR UPDATE`, [req.params.id]);
+      if (!result.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request must have submitted proof and be confirmed for admin review' }); }
       const row = result.rows[0];
       // Coinbase Base Sepolia developer wallets support test ETH/USDC transfers. BTC/USDT requests use the PostgreSQL escrow ledger until a custody/network adapter is configured.
-      await client.query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1`, [row.id]);
+      await client.query(`UPDATE requests SET status = 'confirmed' WHERE id = $1`, [row.id]);
       await client.query(`UPDATE payment_proofs SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2`, [req.user.id, row.proof_id]);
-      await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'awaiting_confirmation', 'under_admin_review', $2)`, [row.id, req.user.id]);
+      await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'confirmed', $2)`, [row.id, req.user.id]);
       await client.query('COMMIT');
-      res.json({ status: 'under_admin_review', release: 'Use the existing admin release endpoint after review.' });
+      res.json({ status: 'confirmed', release: 'Use the admin release endpoint after review.' });
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }catch(error){ next(error); }
 });
@@ -418,18 +442,20 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     const row = result.rows[0];
     if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
     if (row.status === 'deposit_confirming') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Confirm the blockchain deposit before opening this request' }); }
-    if (row.status !== 'under_admin_review') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request is not ready for escrow release' }); }
+    if (!['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request is not ready for escrow release' }); }
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();
     if (!destination) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Fulfiller withdrawal address is required' }); }
     const externalTransactionId = null;
     const settlementMode = 'ledger_only_simulation';
-    await client.query(`UPDATE requests SET status = 'completed', released_at = now(), released_by = $1 WHERE id = $2`, [req.user.id, req.params.id]);
+    await client.query(`UPDATE requests SET status = 'released', released_at = now(), released_by = $1 WHERE id = $2`, [req.user.id, req.params.id]);
     const releaseAmount = assetAmount(row.escrow_asset, Number(row.amount) + Number(row.reward));
     await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [row.deposit_amount, row.requester_id, row.escrow_asset]);
     await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $6 IS NULL THEN NULL ELSE now() END)`, [row.id, row.fulfiller_id, row.escrow_asset, destination, releaseAmount, externalTransactionId, externalTransactionId ? 'confirmed' : 'pending']);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6)`, [row.requester_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, JSON.stringify({ releasedBy: req.user.id, settlementMode })]);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'withdrawal',$4,$5,$6,$7)`, [row.fulfiller_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, externalTransactionId ? 'completed' : 'pending', JSON.stringify({ destinationAddress: destination, settlementMode })]);
+    await client.query(`UPDATE requests SET status = 'completed' WHERE id = $1`, [req.params.id]);
+    await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'confirmed', 'released', $2),($1, 'released', 'completed', $2)`, [req.params.id, req.user.id]);
     await client.query('COMMIT');
     res.json({ status: 'completed', withdrawalStatus: externalTransactionId ? 'confirmed' : 'pending', settlementMode, externalTransactionId });
   }catch(error){ await client.query('ROLLBACK'); next(error); } finally { client.release(); }
@@ -467,7 +493,13 @@ app.get('/health', async (req, res) => {
 async function initializeDatabase(){
   if (!db) return;
   await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
-  await db.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS deposit_address TEXT, ADD COLUMN IF NOT EXISTS deposit_memo TEXT, ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(28,8), ADD COLUMN IF NOT EXISTS required_confirmations INTEGER NOT NULL DEFAULT 3, ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS fulfiller_wallet TEXT`);
+  await db.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS deposit_address TEXT, ADD COLUMN IF NOT EXISTS deposit_memo TEXT, ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(28,8), ADD COLUMN IF NOT EXISTS required_confirmations INTEGER NOT NULL DEFAULT 3, ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS fulfiller_wallet TEXT, ADD COLUMN IF NOT EXISTS escrow_mode TEXT NOT NULL DEFAULT 'real', ADD COLUMN IF NOT EXISTS cdp_account_id TEXT, ADD COLUMN IF NOT EXISTS cdp_transaction_id TEXT`);
+  await db.query(`ALTER TABLE requests DROP CONSTRAINT IF EXISTS requests_escrow_asset_check, DROP CONSTRAINT IF EXISTS requests_status_check`);
+  await db.query(`ALTER TABLE wallets DROP CONSTRAINT IF EXISTS wallets_asset_check`);
+  await db.query(`ALTER TABLE deposit_addresses DROP CONSTRAINT IF EXISTS deposit_addresses_asset_check`);
+  await db.query(`ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS ledger_entries_asset_check`);
+  await db.query(`ALTER TABLE withdrawals DROP CONSTRAINT IF EXISTS withdrawals_asset_check`);
+  await db.query(`ALTER TABLE requests ADD CONSTRAINT requests_escrow_asset_check CHECK (escrow_asset IN ('USDC','USDT','BTC')), ADD CONSTRAINT requests_status_check CHECK (status IN ('draft','awaiting_deposit','deposit_confirming','funded','open','accepted','payment_pending','payment_proof_submitted','confirmed','released','in_progress','awaiting_confirmation','under_admin_review','completed','disputed','cancelled'))`);
   await db.query(`UPDATE requests SET fee = ROUND((amount + reward) * 0.025, 2), total = amount + reward + ROUND((amount + reward) * 0.025, 2) WHERE fee <> ROUND((amount + reward) * 0.025, 2) OR total <> amount + reward + ROUND((amount + reward) * 0.025, 2)`);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD){
     const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);

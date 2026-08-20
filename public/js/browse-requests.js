@@ -158,7 +158,7 @@ document.addEventListener('partials:loaded', () => {
   }
 
   function statusLabel(status){
-    return { draft: 'Draft', awaiting_deposit: 'Awaiting Deposit', deposit_confirming: 'Deposit Confirming', open: 'Open', accepted: 'Accepted', in_progress: 'In Progress', awaiting_confirmation: 'Awaiting Confirmation', under_admin_review: 'Under Admin Review', completed: 'Completed', disputed: 'Disputed', cancelled: 'Cancelled' }[status] || 'Closed';
+    return { draft: 'Draft', awaiting_deposit: 'Awaiting Deposit', deposit_confirming: 'Deposit Confirming', funded: 'Funded', open: 'Open', accepted: 'Accepted', payment_pending: 'Payment Pending', payment_proof_submitted: 'Payment Proof Submitted', confirmed: 'Confirmed', released: 'Released', in_progress: 'In Progress', awaiting_confirmation: 'Awaiting Confirmation', under_admin_review: 'Under Admin Review', completed: 'Completed', disputed: 'Disputed', cancelled: 'Cancelled' }[status] || 'Closed';
   }
 
   function maskRecipient(value){
