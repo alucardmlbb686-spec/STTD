@@ -131,3 +131,18 @@ CREATE TABLE IF NOT EXISTS request_status_history (
 
 CREATE UNIQUE INDEX IF NOT EXISTS payment_proofs_one_submitted_idx ON payment_proofs (request_id) WHERE status = 'submitted';
 CREATE INDEX IF NOT EXISTS request_status_history_idx ON request_status_history (request_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES users(id),
+  body TEXT,
+  attachment_path TEXT,
+  attachment_name TEXT,
+  attachment_mime TEXT,
+  attachment_size INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (NULLIF(trim(body), '') IS NOT NULL OR attachment_path IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS chat_messages_request_idx ON chat_messages (request_id, created_at ASC);

@@ -69,6 +69,24 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="chatModal">
+  <div class="modal" style="width:520px; max-height:86vh; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <div><h3 id="chatTitle">Request chat</h3><div class="hint">Only request participants can see this conversation.</div></div>
+      <button class="icon-btn" id="chatClose" aria-label="Close chat">&times;</button>
+    </div>
+    <div id="chatMessages" style="min-height:180px; max-height:390px; overflow:auto; padding:8px 2px; display:flex; flex-direction:column; gap:10px;"></div>
+    <form id="chatForm" style="margin-top:14px;">
+      <textarea class="input" id="chatBody" rows="2" maxlength="4000" placeholder="Write a message to the requester or fulfiller..."></textarea>
+      <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+        <input id="chatAttachment" type="file" accept="image/png,image/jpeg,image/webp" style="max-width:220px;">
+        <button class="btn btn-primary btn-block" type="submit" id="chatSend">Send <span class="spinner"></span></button>
+      </div>
+      <div class="hint" style="margin-top:7px;">Attach a PNG, JPG, JPEG, or WEBP screenshot up to 8 MB.</div>
+    </form>
+  </div>
+</div>
+
 <script src="/js/main.js"></script>
 <script src="/js/store.js"></script>
 <script src="/js/my-requests.js"></script>

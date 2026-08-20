@@ -47,7 +47,7 @@ document.addEventListener('partials:loaded', () => {
           <td class="mono text-green">+${SC.fmtMoney(r.reward)}</td>
           <td>${SC.statusBadge(r.status)}</td>
           <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
-          <td><div class="table-actions"><button class="icon-btn view-btn" data-id="${r.id}" aria-label="View details">
+          <td><div class="table-actions"><button class="btn btn-secondary btn-sm chat-btn" data-id="${r.id}">Chat</button><button class="icon-btn view-btn" data-id="${r.id}" aria-label="View details">
             <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="2.3" stroke="currentColor" stroke-width="1.4"/></svg>
           </button></div></td>
         </tr>
@@ -55,7 +55,49 @@ document.addEventListener('partials:loaded', () => {
     }).join('');
 
     SC.qsa('.view-btn').forEach(btn => btn.addEventListener('click', () => openDetail(btn.dataset.id)));
+    SC.qsa('.chat-btn').forEach(btn => btn.addEventListener('click', () => openChat(btn.dataset.id)));
   }
+
+  const chatModal = document.getElementById('chatModal');
+  let chatRequestId = null;
+  let chatRefreshTimer = null;
+  async function openChat(id){
+    chatRequestId = id;
+    document.getElementById('chatTitle').textContent = `Chat · ${id}`;
+    chatModal.classList.add('show');
+    await renderChat();
+    clearInterval(chatRefreshTimer);
+    chatRefreshTimer = setInterval(() => { if (!document.hidden && chatModal.classList.contains('show')) renderChat(); }, 5000);
+  }
+  async function renderChat(){
+    const container = document.getElementById('chatMessages');
+    try {
+      const payload = await SCStore.api(`/api/requests/${chatRequestId}/chat`);
+      container.innerHTML = payload.messages.length ? payload.messages.map(message => `<div style="align-self:${message.mine ? 'flex-end' : 'flex-start'}; max-width:82%;"><div style="font-size:11px;color:var(--text-3);margin-bottom:3px;">${message.mine ? 'You' : message.senderName} · ${SC.timeAgo(message.createdAt)}</div><div style="padding:10px 12px;border:1px solid var(--border-2);border-radius:10px;background:${message.mine ? 'rgba(0,255,0,.08)' : 'var(--surface-3)'};">${message.body ? `<div>${message.body}</div>` : ''}${message.attachment ? `<a href="${message.attachment.url}" target="_blank" rel="noreferrer" style="display:block;margin-top:${message.body ? '8px' : '0'};color:var(--star-400);">View screenshot: ${message.attachment.name}</a>` : ''}</div></div>`).join('') : '<div class="empty-state"><h3>No messages yet</h3><p>Start the conversation and share proof here.</p></div>';
+      container.scrollTop = container.scrollHeight;
+    } catch (error) { container.innerHTML = `<div class="empty-state"><p>${error.message}</p></div>`; }
+  }
+  function closeChat(){ clearInterval(chatRefreshTimer); chatRefreshTimer = null; chatModal.classList.remove('show'); }
+  document.getElementById('chatClose').addEventListener('click', closeChat);
+  chatModal.addEventListener('click', event => { if (event.target === chatModal) closeChat(); });
+  document.getElementById('chatForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const sendButton = document.getElementById('chatSend');
+    const body = document.getElementById('chatBody').value.trim();
+    const file = document.getElementById('chatAttachment').files[0];
+    if (!body && !file) { SC.toast('Write a message or attach an image.', 'error'); return; }
+    if (file && (file.size > 8 * 1024 * 1024 || !['image/png','image/jpeg','image/webp'].includes(file.type))) { SC.toast('Use a PNG, JPG, JPEG, or WEBP image up to 8 MB.', 'error'); return; }
+    SC.setLoading(sendButton, true);
+    try {
+      if (file) {
+        const formData = new FormData(); formData.append('attachment', file); if (body) formData.append('body', body);
+        const response = await fetch(`/api/requests/${chatRequestId}/chat/upload`, { method: 'POST', body: formData, credentials: 'same-origin' });
+        const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || 'Image upload failed');
+      } else await SCStore.api(`/api/requests/${chatRequestId}/chat`, { method: 'POST', body: JSON.stringify({ body }) });
+      document.getElementById('chatBody').value = ''; document.getElementById('chatAttachment').value = ''; await renderChat();
+    } catch (error) { SC.toast(error.message, 'error'); }
+    finally { SC.setLoading(sendButton, false); }
+  });
 
   const detailModal = document.getElementById('detailModal');
   async function openDetail(id){

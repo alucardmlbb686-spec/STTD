@@ -13,6 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PROOF_DIR = path.join(__dirname, 'uploads', 'proofs');
+const CHAT_DIR = path.join(__dirname, 'uploads', 'chat');
 const db = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -23,10 +24,19 @@ const db = process.env.DATABASE_URL
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(PUBLIC_DIR));
 fs.mkdirSync(PROOF_DIR, { recursive: true });
+fs.mkdirSync(CHAT_DIR, { recursive: true });
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-8', legacyHeaders: false });
 const proofUpload = multer({
   storage: multer.diskStorage({
     destination: PROOF_DIR,
+    filename: (req, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => callback(null, ['image/png', 'image/jpeg', 'image/webp'].includes(file.mimetype)),
+});
+const chatUpload = multer({
+  storage: multer.diskStorage({
+    destination: CHAT_DIR,
     filename: (req, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
   }),
   limits: { fileSize: 8 * 1024 * 1024, files: 1 },
@@ -100,6 +110,15 @@ async function requireUser(req, res, next){
 function requireAdmin(req, res, next){
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
   next();
+}
+
+async function getParticipantRequest(requestId, userId){
+  const result = await query(`SELECT id, requester_id, fulfiller_id FROM requests WHERE id = $1 AND (requester_id = $2 OR fulfiller_id = $2)`, [requestId, userId]);
+  return result.rows[0];
+}
+
+function publicChatMessage(row, userId){
+  return { id: row.id, requestId: row.request_id, senderId: row.sender_id, mine: row.sender_id === userId, body: row.body, attachment: row.attachment_path ? { name: row.attachment_name, mime: row.attachment_mime, size: row.attachment_size, url: `/api/requests/${row.request_id}/chat/attachment/${row.id}` } : null, createdAt: row.created_at, senderName: row.sender_name };
 }
 
 async function createSession(user, res){
@@ -250,6 +269,51 @@ app.post('/api/requests/:id/payment-proof', requireUser, proofUpload.single('pro
     await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'accepted', 'awaiting_confirmation', $2)`, [req.params.id, req.user.id]);
     res.status(201).json({ status: 'awaiting_confirmation', proof: { fileName: req.file.originalname, uploadedAt: new Date().toISOString() } });
   }catch(error){ if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); next(error); }
+});
+
+app.get('/api/requests/:id/chat', requireUser, async (req, res, next) => {
+  try{
+    const request = await getParticipantRequest(req.params.id, req.user.id);
+    if (!request) return res.status(403).json({ error: 'Only the requester and accepted fulfiller can access this chat' });
+    const result = await query(`SELECT m.*, u.full_name AS sender_name FROM chat_messages m JOIN users u ON u.id = m.sender_id WHERE m.request_id = $1 ORDER BY m.created_at ASC LIMIT 200`, [req.params.id]);
+    res.json({ messages: result.rows.map(row => publicChatMessage(row, req.user.id)) });
+  }catch(error){ next(error); }
+});
+
+app.post('/api/requests/:id/chat', requireUser, async (req, res, next) => {
+  try{
+    const request = await getParticipantRequest(req.params.id, req.user.id);
+    if (!request) return res.status(403).json({ error: 'Only the requester and accepted fulfiller can send chat messages' });
+    const body = req.body.body?.trim();
+    if (!body || body.length > 4000) return res.status(400).json({ error: 'Message must be between 1 and 4000 characters' });
+    const result = await query(`INSERT INTO chat_messages (request_id, sender_id, body) VALUES ($1,$2,$3) RETURNING *`, [req.params.id, req.user.id, body]);
+    const sender = await query('SELECT full_name AS sender_name FROM users WHERE id = $1', [req.user.id]);
+    res.status(201).json({ message: publicChatMessage({ ...result.rows[0], sender_name: sender.rows[0].sender_name }, req.user.id) });
+  }catch(error){ next(error); }
+});
+
+app.post('/api/requests/:id/chat/upload', requireUser, chatUpload.single('attachment'), async (req, res, next) => {
+  try{
+    const request = await getParticipantRequest(req.params.id, req.user.id);
+    if (!request) { if (req.file) fs.unlinkSync(req.file.path); return res.status(403).json({ error: 'Only the requester and accepted fulfiller can upload chat images' }); }
+    if (!req.file || !validImageSignature(req.file.path, req.file.mimetype)) { if (req.file) fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Choose a valid PNG, JPG, JPEG, or WEBP image up to 8 MB' }); }
+    const body = req.body.body?.trim() || null;
+    const result = await query(`INSERT INTO chat_messages (request_id, sender_id, body, attachment_path, attachment_name, attachment_mime, attachment_size) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`, [req.params.id, req.user.id, body, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size]);
+    const sender = await query('SELECT full_name AS sender_name FROM users WHERE id = $1', [req.user.id]);
+    res.status(201).json({ message: publicChatMessage({ ...result.rows[0], sender_name: sender.rows[0].sender_name }, req.user.id) });
+  }catch(error){ if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); next(error); }
+});
+
+app.get('/api/requests/:id/chat/attachment/:messageId', requireUser, async (req, res, next) => {
+  try{
+    const request = await getParticipantRequest(req.params.id, req.user.id);
+    if (!request) return res.status(403).json({ error: 'Chat access denied' });
+    const result = await query(`SELECT attachment_path FROM chat_messages WHERE id = $1 AND request_id = $2`, [req.params.messageId, req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Attachment not found' });
+    const filePath = path.join(CHAT_DIR, path.basename(result.rows[0].attachment_path));
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Attachment file unavailable' });
+    res.sendFile(filePath);
+  }catch(error){ next(error); }
 });
 
 app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) => {
