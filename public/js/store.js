@@ -34,7 +34,7 @@ const SCStore = (() => {
     let payload;
     if (changes.txHash) payload = await api(`/api/requests/${id}/deposit`, { method: 'POST', body: JSON.stringify({ txHash: changes.txHash }) });
     else if (changes.proof) payload = await api(`/api/requests/${id}/proof`, { method: 'POST', body: JSON.stringify({ details: changes.proof.details }) });
-    else if (changes.status === 'accepted') payload = await api(`/api/requests/${id}/accept`, { method: 'POST' });
+    else if (changes.status === 'accepted') payload = await api(`/api/requests/${id}/accept`, { method: 'POST', body: JSON.stringify({ walletAddress: changes.walletAddress }) });
     else if (changes.status === 'under_admin_review') payload = await api(`/api/requests/${id}/confirm`, { method: 'POST' });
     else if (changes.status === 'disputed') payload = await api(`/api/requests/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason: changes.dispute?.reason }) });
     else if (changes.status === 'cancelled') payload = await api(`/api/requests/${id}/cancel`, { method: 'POST' });

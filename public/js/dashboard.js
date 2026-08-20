@@ -123,13 +123,14 @@ document.addEventListener('partials:loaded', () => {
     const pageBody = document.querySelector('.page-body');
     if (section === 'wallet') {
       const mine = await SCStore.getMine();
+      const walletData = await SCStore.api('/api/wallet');
       const completed = mine.filter(request => request.status === 'completed');
-      const rewards = completed.reduce((total, request) => total + request.reward, 0);
+      const rewards = walletData.wallets.reduce((total, wallet) => total + Number(wallet.available_balance || 0), 0);
       const pendingRewards = mine.filter(request => ['accepted', 'in_progress', 'awaiting_confirmation', 'under_admin_review'].includes(request.status)).reduce((total, request) => total + request.reward, 0);
       pageBody.innerHTML = `
         <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
         <div class="wallet-balance-card">
-          <div><div class="wallet-eyebrow">Available balance</div><div class="wallet-balance">${SC.fmtMoney(rewards)}</div><div class="wallet-balance-note">Ready from completed requests</div></div>
+          <div><div class="wallet-eyebrow">Available balance</div><div class="wallet-balance">${walletData.wallets.map(wallet => `${Number(wallet.available_balance).toFixed(wallet.asset === 'BTC' ? 8 : 2)} ${wallet.asset}`).join(' · ') || '0.00 USDT'}</div><div class="wallet-balance-note">Available after confirmed withdrawals</div></div>
           <div class="wallet-balance-side"><span class="wallet-status-dot"></span><span>Wallet active</span><div class="wallet-balance-mark">$</div></div>
         </div>
         <div class="wallet-metrics">
@@ -138,7 +139,7 @@ document.addEventListener('partials:loaded', () => {
           <div class="card wallet-metric"><span class="wallet-metric-label">Completed requests</span><strong>${completed.length}</strong><span class="wallet-metric-meta">All time</span></div>
         </div>
         <div class="card wallet-activity-card"><div class="panel-head"><div><h3>Wallet activity</h3><div class="wallet-panel-sub">Recent completed reward deposits</div></div><span class="pill-tag">${completed.length} completed</span></div>
-          ${completed.length ? `<div class="wallet-ledger">${completed.slice(0,8).map(request => `<div class="wallet-ledger-row"><div class="wallet-ledger-icon">${SC.methodIcon(request.method)}</div><div class="req-main"><div class="req-title">Reward from ${request.id}</div><div class="req-meta">${SC.methodMeta(request.method).label} · ${SC.timeAgo(request.createdAt)}</div></div><div class="wallet-ledger-amount"><strong>+${SC.fmtMoney(request.reward)}</strong><span>Deposited</span></div></div>`).join('')}</div>` : '<div class="empty-state wallet-empty"><h3>No wallet activity yet</h3><p>Complete a request to receive rewards in your wallet.</p><a href="/browse-requests.html" class="btn btn-secondary btn-sm">Browse requests</a></div>'}
+          ${walletData.ledger.length ? `<div class="wallet-ledger">${walletData.ledger.slice(0,8).map(entry => `<div class="wallet-ledger-row"><div class="wallet-ledger-icon">${SC.methodIcon('crypto')}</div><div class="req-main"><div class="req-title">${entry.entry_type.replaceAll('_', ' ')}</div><div class="req-meta">${entry.asset} · ${entry.status} · ${SC.timeAgo(entry.created_at)}</div></div><div class="wallet-ledger-amount"><strong>${entry.entry_type === 'withdrawal' || entry.entry_type === 'escrow_lock' ? '-' : '+'}${entry.amount} ${entry.asset}</strong><span>${entry.confirmations || 0} confirmations</span></div></div>`).join('')}</div>` : '<div class="empty-state wallet-empty"><h3>No wallet activity yet</h3><p>Deposits, locked escrow, and withdrawals will appear here.</p><a href="/browse-requests.html" class="btn btn-secondary btn-sm">Browse requests</a></div>'}
         </div>`;
       return;
     }

@@ -200,9 +200,11 @@ document.addEventListener('partials:loaded', () => {
 
   document.getElementById('acceptConfirm').addEventListener('click', async function(){
     const btn = this;
+    const walletAddress = document.getElementById('fulfillerWallet').value.trim();
+    if (!walletAddress){ SC.toast('Enter your payout wallet address first.', 'error'); return; }
     SC.setLoading(btn, true);
     try {
-      await SCStore.update(pendingId, { status: 'accepted' });
+      await SCStore.update(pendingId, { status: 'accepted', walletAddress });
       acceptModal.classList.remove('show');
       SC.toast(`${pendingId} accepted — recipient will be notified.`, 'success');
       await refresh();

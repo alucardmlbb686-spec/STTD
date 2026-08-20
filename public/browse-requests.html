@@ -98,6 +98,7 @@
     <h3 style="margin-bottom:10px;">Accept this request?</h3>
     <p style="font-size:13.5px; margin-bottom:20px;" id="acceptModalSub">You're about to accept a request. You'll be responsible for sending the funds through the selected method.</p>
     <div class="kv-list" id="acceptModalDetails" style="margin-bottom:22px;"></div>
+    <div class="field" style="margin-bottom:20px;"><label for="fulfillerWallet">Your payout wallet address</label><input class="input mono" id="fulfillerWallet" placeholder="BTC or USDT wallet address" required><div class="hint">Escrow rewards will be released to this address after admin approval.</div></div>
     <div style="display:flex; gap:10px;">
       <button class="btn btn-secondary btn-block" id="acceptCancel">Cancel</button>
       <button class="btn btn-primary btn-block" id="acceptConfirm">Confirm accept <span class="spinner"></span></button>

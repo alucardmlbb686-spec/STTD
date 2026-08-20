@@ -103,7 +103,7 @@ document.addEventListener('partials:loaded', async () => {
         <td>${SC.statusBadge(r.status)}</td>
         <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
         <td><div class="table-actions">
-          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'under_admin_review' ? 'Release escrow' : 'Review'}</button>
+          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : r.status === 'under_admin_review' ? 'Release escrow' : 'Review'}</button>
         </div></td>
       </tr>
     `).join('');
@@ -111,7 +111,19 @@ document.addEventListener('partials:loaded', async () => {
     document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', async () => {
       const request = all.find(item => item.id === button.dataset.id);
       if (!request) return;
-      try { const result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST' }); SC.toast(`${request.id} updated to ${result.status}.`, 'success'); render(); }
+      try {
+        let result;
+        if (request.status === 'deposit_confirming') {
+          result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
+        } else if (request.status === 'under_admin_review') {
+          const destinationAddress = window.prompt('Enter the fulfiller withdrawal wallet address:');
+          if (!destinationAddress) return;
+          result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST', body: JSON.stringify({ destinationAddress }) });
+        } else {
+          result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST' });
+        }
+        SC.toast(`${request.id} updated to ${result.status}.`, 'success'); render();
+      }
       catch (error) { SC.toast(error.message, 'error'); }
     }));
 

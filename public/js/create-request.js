@@ -166,6 +166,8 @@ document.addEventListener('partials:loaded', () => {
       SC.setLoading(btn, false);
 
       document.getElementById('successSub').textContent = `${createdRequest.id} is Awaiting Deposit. Submit the ${createdRequest.escrowAsset} transaction hash after sending ${SC.fmtMoney(createdRequest.total)}.`;
+      document.getElementById('depositAddress').textContent = createdRequest.depositAddress ? `${createdRequest.depositAddress} (${createdRequest.depositAmount} ${createdRequest.escrowAsset})` : 'Unavailable';
+      document.getElementById('depositMemo').textContent = createdRequest.depositMemo || 'No memo required';
       document.getElementById('successModal').classList.add('show');
     } catch (error) { SC.setLoading(btn, false); SC.toast(error.message, 'error'); }
   });
