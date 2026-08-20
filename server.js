@@ -41,7 +41,7 @@ function publicRequest(row, viewerId, viewerRole){
   const canViewPrivate = isOwner || isFulfiller || viewerRole === 'admin';
   return {
     id: row.id, requester: row.requester_name, requesterId: row.requester_id, fulfiller: row.fulfiller_name,
-    recipientName: canViewPrivate ? row.recipient_name : undefined,
+    recipientName: row.recipient_name,
     recipient: canViewPrivate ? row.recipient_contact : 'Hidden until acceptance',
     method: row.method, amount: Number(row.amount), reward: Number(row.reward), fee: Number(row.fee), total: Number(row.total),
     reason: row.reason, dueAt: row.due_at, note: row.note, escrowAsset: row.escrow_asset, escrowTxHash: canViewPrivate ? row.escrow_tx_hash : undefined,
@@ -128,7 +128,7 @@ app.get('/api/requests', requireUser, async (req, res, next) => {
 app.post('/api/requests', requireUser, async (req, res, next) => {
   try{
     const { method, recipientName, recipient, amount, reward, reason, dueAt, note, escrowAsset } = req.body;
-    const amountNumber = Number(amount); const rewardNumber = Number(reward || 0); const fee = Math.round(amountNumber * 0.025 * 100) / 100;
+    const amountNumber = Number(amount); const rewardNumber = Number(reward || 0); const fee = Math.round((amountNumber + rewardNumber) * 0.025 * 100) / 100;
     if (!allowedMethods.has(method) || !recipientName?.trim() || !recipient?.trim() || !amountNumber || amountNumber <= 0 || rewardNumber < 0 || !reason?.trim() || !dueAt || !['BTC','USDT'].includes(escrowAsset)) return res.status(400).json({ error: 'Complete all request fields with valid values' });
     const result = await query(`INSERT INTO requests (requester_id, method, recipient_name, recipient_contact, amount, reward, fee, total, reason, due_at, note, escrow_asset) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, [req.user.id, method, recipientName.trim(), recipient.trim(), amountNumber, rewardNumber, fee, amountNumber + rewardNumber + fee, reason.trim(), dueAt, note?.trim() || null, escrowAsset]);
     const created = await query(`${requestSelect} WHERE r.id = $1`, [result.rows[0].id]);
@@ -213,6 +213,7 @@ app.get('/health', async (req, res) => {
 async function initializeDatabase(){
   if (!db) return;
   await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+  await db.query(`UPDATE requests SET fee = ROUND((amount + reward) * 0.025, 2), total = amount + reward + ROUND((amount + reward) * 0.025, 2) WHERE fee <> ROUND((amount + reward) * 0.025, 2) OR total <> amount + reward + ROUND((amount + reward) * 0.025, 2)`);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD){
     const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
     await db.query(`INSERT INTO users (full_name, email, password_hash, role) VALUES ($1, lower($2), $3, 'admin') ON CONFLICT (email) DO NOTHING`, [process.env.ADMIN_NAME || 'Platform Administrator', process.env.ADMIN_EMAIL, passwordHash]);

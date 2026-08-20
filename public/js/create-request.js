@@ -116,14 +116,16 @@ document.addEventListener('partials:loaded', () => {
     document.getElementById('sumCrypto').textContent = cryptoMarket.value || '—';
     document.getElementById('sumAmount').textContent = SC.fmtMoney(amount);
     document.getElementById('sumReward').textContent = SC.fmtMoney(reward);
-    const fee = Math.round(amount * 0.025 * 100) / 100;
+    const fee = Math.round((amount + reward) * 0.025 * 100) / 100;
     document.getElementById('sumFee').textContent = SC.fmtMoney(fee);
     document.getElementById('sumTotal').textContent = SC.fmtMoney(amount + reward + fee);
     document.getElementById('escrowTotal').textContent = `Total deposit: ${SC.fmtMoney(amount + reward + fee)}`;
   }
   amountEl.addEventListener('input', () => {
     if (!rewardEl.dataset.touched){
-      const suggested = Math.round((parseFloat(amountEl.value) || 0) * 0.025 * 100) / 100;
+      const amount = parseFloat(amountEl.value) || 0;
+      const reward = parseFloat(rewardEl.value) || 0;
+      const suggested = Math.round((amount + reward) * 0.025 * 100) / 100;
       rewardEl.value = suggested || '';
     }
     updateSummary();

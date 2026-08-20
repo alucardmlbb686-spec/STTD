@@ -108,7 +108,6 @@ document.addEventListener('partials:loaded', () => {
     const meta = SC.methodMeta(r.method);
     const canAccept = r.status === 'open' && r.depositStatus === 'confirmed';
     const isFulfiller = r.fulfiller === SCStore.getUser().name;
-    const recipient = maskRecipient(r.recipient);
     return `
       <div class="card card-hover request-card">
         <div class="rc-top">
@@ -119,6 +118,7 @@ document.addEventListener('partials:loaded', () => {
           ${SC.statusBadge(r.status)}
         </div>
         <div class="request-card-title">Send ${SC.fmtMoney(r.amount)} via ${meta.label}</div>
+        <div class="request-card-recipient">Recipient: <span>${r.recipientName || 'Recipient'}</span></div>
         <div class="request-card-recipient">Reason: <span>${r.reason || 'Payment request'}</span></div>
         <div class="request-card-recipient">Due: <span>${r.dueAt ? new Date(r.dueAt).toLocaleString() : 'Not specified'}</span></div>
         <div class="request-card-recipient">Requester: <span>${r.requester} · ${r.completedRequests || 0} completed</span></div>
