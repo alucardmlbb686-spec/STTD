@@ -29,7 +29,7 @@ Then open **http://localhost:3000**.
 - Configure real `ESCROW_BTC_ADDRESS`, `ESCROW_USDT_ADDRESS`, and `BTC_USD_RATE` values. Each request receives a unique memo while funds are sent to the configured custody wallet.
 - Configure `BLOCKCHAIN_WEBHOOK_SECRET` and have your blockchain provider call `POST /api/webhooks/blockchain` with `x-blockchain-secret`, `txHash`, `asset`, `amount`, and `confirmations`. The webhook records the deposit, waits for the required confirmations, and atomically locks the funds.
 - Wallet balances and `ledger_entries` track deposits, escrow locks, releases, withdrawals, confirmations, and transaction hashes. Admin release creates a pending withdrawal; the custody provider or admin confirms it through `POST /api/admin/withdrawals/:id/confirm`.
-- Coinbase testing uses the official `@coinbase/coinbase-sdk` on Base Sepolia. Configure `COINBASE_API_KEY_NAME` and `COINBASE_API_PRIVATE_KEY` from the Coinbase Developer Platform. The SDK supports developer-custodied test wallets, balances, faucet requests, and ETH/USDC transfers. Coinbase does not provide StarCurrency escrow, and this SDK flow does not support BTC/USDT settlement; those assets remain in the PostgreSQL ledger-only simulation until a compatible custody/network adapter is installed.
+- Coinbase testing uses the official `@coinbase/coinbase-sdk` on Base Sepolia. Configure `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` from the Coinbase Developer Platform. The SDK uses the CDP API ID and secret for authentication; the wallet secret remains server-only and is never returned to clients. The SDK supports developer-custodied test wallets, balances, faucet requests, and ETH/USDC transfers. Coinbase does not provide StarCurrency escrow, and this SDK flow does not support BTC/USDT settlement; those assets remain in the PostgreSQL ledger-only simulation until a compatible custody/network adapter is installed.
 - Payment proof uploads accept PNG, JPG/JPEG, and WEBP up to 8 MB. Files are stored outside `public/` and require authenticated access.
 - Coinbase test endpoints: `GET /api/wallet/status`, admin-only `GET /api/wallet/coinbase`, `POST /api/wallet/coinbase/test-wallet`, `GET /api/wallet/coinbase/:walletId/balances`, and `POST /api/wallet/coinbase/:walletId/faucet`.
 - Set `NODE_ENV=production` to enable secure session cookies. Use HTTPS in production.
@@ -41,11 +41,9 @@ Then open **http://localhost:3000**.
 3. Copy `.env.example` to `.env` and set:
 
 ```env
-COINBASE_API_KEY_NAME=your-cdp-api-key-name
-COINBASE_API_PRIVATE_KEY="-----BEGIN EC PRIVATE KEY-----\nYOUR_KEY\n-----END EC PRIVATE KEY-----"
-COINBASE_RELEASE_WALLET_ID=your-base-sepolia-wallet-id
-COINBASE_RELEASE_ASSET_ID=usdc
-COINBASE_RELEASE_GASLESS=true
+CDP_API_KEY_ID=PASTE_YOUR_API_KEY_ID_HERE
+CDP_API_KEY_SECRET=PASTE_YOUR_API_KEY_SECRET_HERE
+CDP_WALLET_SECRET=PASTE_YOUR_WALLET_SECRET_HERE
 ```
 
 4. Use the Coinbase SDK's Base Sepolia developer wallet endpoint to create a test wallet: `POST /api/wallet/coinbase/test-wallet` as an admin. The response contains only the wallet ID and public address.

@@ -3,15 +3,15 @@ const { Coinbase, Wallet } = require('@coinbase/coinbase-sdk');
 let configured = false;
 
 function isConfigured(){
-  return Boolean(process.env.COINBASE_API_KEY_NAME && process.env.COINBASE_API_PRIVATE_KEY);
+  return Boolean(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET && process.env.CDP_WALLET_SECRET);
 }
 
 function configure(){
   if (!isConfigured()) throw new Error('Coinbase sandbox credentials are not configured');
   if (!configured){
     Coinbase.configure({
-      apiKeyName: process.env.COINBASE_API_KEY_NAME,
-      privateKey: process.env.COINBASE_API_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      apiKeyName: process.env.CDP_API_KEY_ID,
+      privateKey: process.env.CDP_API_KEY_SECRET.replace(/\\n/g, '\n'),
     });
     configured = true;
   }
@@ -63,6 +63,10 @@ async function transfer({ walletId, assetId, amount, destination, gasless = fals
   return { transfer: String(completed), walletId, assetId, amount, destination };
 }
 
-function releaseConfigured(){ return isConfigured() && process.env.COINBASE_RELEASE_WALLET_ID && process.env.COINBASE_RELEASE_ASSET_ID; }
+// The installed SDK's Base Sepolia transfer API requires a persisted wallet ID and
+// asset-specific custody configuration. The requested CDP variables do not define
+// a release wallet ID, so escrow release remains ledger-only until that wallet is
+// provisioned through the admin test-wallet endpoint.
+function releaseConfigured(){ return false; }
 
 module.exports = { isConfigured, releaseConfigured, status, listWallets, createTestWallet, walletBalances, faucet, transfer };

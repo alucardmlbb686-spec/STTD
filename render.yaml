@@ -26,16 +26,12 @@ services:
         sync: false
       - key: BLOCKCHAIN_WEBHOOK_SECRET
         sync: false
-      - key: COINBASE_API_KEY_NAME
+      - key: CDP_API_KEY_ID
         sync: false
-      - key: COINBASE_API_PRIVATE_KEY
+      - key: CDP_API_KEY_SECRET
         sync: false
-      - key: COINBASE_RELEASE_WALLET_ID
+      - key: CDP_WALLET_SECRET
         sync: false
-      - key: COINBASE_RELEASE_ASSET_ID
-        value: usdc
-      - key: COINBASE_RELEASE_GASLESS
-        value: "true"
 
 databases:
   - name: starcurrency-db

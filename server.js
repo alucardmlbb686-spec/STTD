@@ -350,19 +350,8 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();
     if (!destination) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Fulfiller withdrawal address is required' }); }
-    let externalTransactionId = null;
-    let settlementMode = 'ledger_only_simulation';
-    if (coinbase.releaseConfigured() && row.escrow_asset === 'USDT') {
-      const transfer = await coinbase.transfer({
-        walletId: process.env.COINBASE_RELEASE_WALLET_ID,
-        assetId: process.env.COINBASE_RELEASE_ASSET_ID,
-        amount: Number(row.amount) + Number(row.reward),
-        destination,
-        gasless: process.env.COINBASE_RELEASE_GASLESS === 'true',
-      });
-      externalTransactionId = transfer.transfer;
-      settlementMode = 'coinbase_base_sepolia_test_transfer';
-    }
+    const externalTransactionId = null;
+    const settlementMode = 'ledger_only_simulation';
     await client.query(`UPDATE requests SET status = 'completed', released_at = now(), released_by = $1 WHERE id = $2`, [req.user.id, req.params.id]);
     const releaseAmount = assetAmount(row.escrow_asset, Number(row.amount) + Number(row.reward));
     await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [row.deposit_amount, row.requester_id, row.escrow_asset]);
