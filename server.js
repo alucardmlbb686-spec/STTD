@@ -442,6 +442,15 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     const row = result.rows[0];
     if (!row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
     if (row.status === 'deposit_confirming') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Confirm the blockchain deposit before opening this request' }); }
+    if (['payment_proof_submitted', 'awaiting_confirmation'].includes(row.status)) {
+      const proof = await client.query(`SELECT id FROM payment_proofs WHERE request_id = $1 AND status = 'submitted' LIMIT 1`, [row.id]);
+      if (!proof.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Payment proof must be submitted before review' }); }
+      await client.query(`UPDATE requests SET status = 'confirmed' WHERE id = $1`, [row.id]);
+      await client.query(`UPDATE payment_proofs SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE id = $2`, [req.user.id, proof.rows[0].id]);
+      await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, $2, 'confirmed', $3)`, [row.id, row.status, req.user.id]);
+      await client.query('COMMIT');
+      return res.json({ status: 'confirmed', message: 'Payment proof approved. Escrow is ready for release.' });
+    }
     if (!['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request is not ready for escrow release' }); }
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();

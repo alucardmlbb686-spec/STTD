@@ -103,7 +103,7 @@ document.addEventListener('partials:loaded', async () => {
         <td>${SC.statusBadge(r.status)}</td>
         <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
         <td><div class="table-actions">
-          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : r.status === 'payment_proof_submitted' ? 'Approve proof' : ['confirmed','under_admin_review'].includes(r.status) ? 'Release escrow' : 'Review'}</button>
+          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : ['payment_proof_submitted','awaiting_confirmation'].includes(r.status) ? 'Approve proof' : ['confirmed','under_admin_review'].includes(r.status) ? 'Release escrow' : 'Review'}</button>
         </div></td>
       </tr>
     `).join('');
@@ -115,7 +115,7 @@ document.addEventListener('partials:loaded', async () => {
         let result;
         if (request.status === 'deposit_confirming') {
           result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
-        } else if (request.status === 'payment_proof_submitted') {
+        } else if (['payment_proof_submitted','awaiting_confirmation'].includes(request.status)) {
           result = await SCStore.api(`/api/admin/requests/${request.id}/approve`, { method: 'POST' });
         } else if (request.status === 'under_admin_review') {
           const destinationAddress = window.prompt('Enter the fulfiller withdrawal wallet address:');
