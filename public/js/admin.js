@@ -103,10 +103,15 @@ document.addEventListener('partials:loaded', async () => {
         <td>${SC.statusBadge(r.status)}</td>
         <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
         <td><div class="table-actions">
-          <button class="btn btn-secondary btn-sm admin-review-btn" data-id="${r.id}">${r.status === 'deposit_confirming' ? 'Confirm deposit' : ['payment_proof_submitted','awaiting_confirmation'].includes(r.status) ? 'Approve proof' : ['confirmed','under_admin_review'].includes(r.status) ? 'Release escrow' : 'Review'}</button>
+          ${adminActionButton(r)}
         </div></td>
       </tr>
     `).join('');
+
+    function adminActionButton(request){
+      const action = request.status === 'deposit_confirming' ? 'Confirm deposit' : ['payment_proof_submitted','awaiting_confirmation'].includes(request.status) ? 'Approve proof' : ['confirmed','under_admin_review'].includes(request.status) ? 'Release escrow' : null;
+      return action ? `<button class="btn btn-secondary btn-sm admin-review-btn" data-id="${request.id}">${action}</button>` : `<span class="cell-muted">No action</span>`;
+    }
 
     document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', async () => {
       const request = all.find(item => item.id === button.dataset.id);

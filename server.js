@@ -451,7 +451,7 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
       await client.query('COMMIT');
       return res.json({ status: 'confirmed', message: 'Payment proof approved. Escrow is ready for release.' });
     }
-    if (!['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Request is not ready for escrow release' }); }
+    if (!['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: `Request is not ready for escrow release. Current status: ${row.status}` }); }
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();
     if (!destination) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Fulfiller withdrawal address is required' }); }
