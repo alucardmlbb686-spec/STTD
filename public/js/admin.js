@@ -243,10 +243,6 @@ document.addEventListener('partials:loaded', async () => {
         result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
       } else if (['payment_proof_submitted','awaiting_confirmation'].includes(request.status)) {
         result = await SCStore.api(`/api/admin/requests/${request.id}/approve-proof`, { method: 'POST' });
-      } else if (request.status === 'under_admin_review') {
-        const destinationAddress = window.prompt('Enter the fulfiller withdrawal wallet address:');
-        if (!destinationAddress) return;
-        result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST', body: JSON.stringify({ destinationAddress }) });
       } else if (['confirmed', 'under_admin_review'].includes(request.status)) {
         if (!window.confirm(`Release escrow funds to ${request.fulfiller || 'the receiver'}?\n\nRequest: ${request.id}\nAmount: ${SC.fmtMoney(request.amount + request.reward)}\nAsset: ${request.escrowAsset}`)) return;
         result = await SCStore.api(`/api/admin/requests/${request.id}/release-funds`, { method: 'POST' });

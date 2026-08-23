@@ -553,6 +553,7 @@ async function adminProofAction(req, res, next, action){
     await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1,$2,$3,$4)`, [request.id, request.status, newStatus, req.user.id]);
     await logAdminAction(client, req.user.id, request.id, action, request.status, newStatus, note);
     await client.query('COMMIT');
+    if (action === 'approve-proof') await notify(request.requester_id, request.id, 'proof_approved', 'Payment proof was approved by an admin.');
     if (request.fulfiller_id && ['reject-proof', 'request-new-proof'].includes(action)) await notify(request.fulfiller_id, request.id, 'proof_review', `Admin requested new payment proof: ${note}`);
     res.json({ status: newStatus });
   } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
@@ -572,13 +573,14 @@ app.post('/api/admin/requests/:id/release-funds', requireUser, requireAdmin, asy
     if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
     const release = await escrow.releaseEscrowFunds(client, request, req.user.id);
     const previousStatus = request.status;
-    await client.query(`UPDATE requests SET status = 'completed', release_status = 'released', escrow_status = 'released', released_at = now(), released_by = $1, provider_transaction_id = $2, completed_at = now() WHERE id = $3 AND release_status <> 'released'`, [req.user.id, release.providerTransactionId, request.id]);
+    await client.query(`UPDATE requests SET status = 'released', release_status = 'released', escrow_status = 'released', released_at = now(), released_by = $1, provider_transaction_id = $2 WHERE id = $3 AND release_status <> 'released'`, [req.user.id, release.providerTransactionId, request.id]);
     const updated = await client.query('SELECT status FROM requests WHERE id = $1', [request.id]);
-    if (updated.rows[0].status !== 'completed') throw Object.assign(new Error('Funds have already been released'), { statusCode: 409 });
+    if (updated.rows[0].status !== 'released') throw Object.assign(new Error('Funds have already been released'), { statusCode: 409 });
     const releaseAmount = assetAmount(request.escrow_asset, Number(request.amount) + Number(request.reward));
     await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [request.deposit_amount, request.requester_id, request.escrow_asset]);
     await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status) VALUES ($1,$2,$3,$4,$5,$6,'pending') ON CONFLICT (request_id) DO NOTHING`, [request.id, request.fulfiller_id, request.escrow_asset, request.fulfiller_wallet, releaseAmount, release.providerTransactionId]);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6),($7,$2,$3,'withdrawal',$4,$5,'completed',$6)`, [request.requester_id, request.id, request.escrow_asset, releaseAmount, release.providerTransactionId, JSON.stringify({ releasedBy: req.user.id, simulated: release.simulated }), request.fulfiller_id]);
+    await client.query(`UPDATE requests SET status = 'completed', completed_at = now() WHERE id = $1 AND status = 'released'`, [request.id]);
     await logAdminAction(client, req.user.id, request.id, 'release-funds', previousStatus, 'completed', req.body.note);
     await client.query('COMMIT');
     await notify(request.requester_id, request.id, 'funds_released', 'Payment completed and escrow funds have been released.');

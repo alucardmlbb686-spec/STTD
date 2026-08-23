@@ -36,6 +36,12 @@ async function releaseEscrowFunds(client, request, adminId){
     error.statusCode = 409;
     throw error;
   }
+  const proof = await client.query(`SELECT status FROM payment_proofs WHERE request_id = $1 ORDER BY created_at DESC LIMIT 1`, [request.id]);
+  if (proof.rows[0]?.status !== 'approved') {
+    const error = new Error('Payment proof must be approved before release');
+    error.statusCode = 409;
+    throw error;
+  }
   // Sandbox releases use the existing escrow ledger and a provider-shaped id.
   // A live custody adapter can replace this branch without changing the route contract.
   if (!releaseConfigured()) {
