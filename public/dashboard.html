@@ -74,6 +74,21 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="taskProofModal">
+  <div class="modal">
+    <h3 style="margin-bottom:10px;">Confirm Paid</h3>
+    <p style="font-size:13.5px; margin-bottom:20px;">Upload proof that you sent the requested payment to the requester.</p>
+    <input class="input" id="taskProofFile" type="file" accept="image/png,image/jpeg,image/webp" required>
+    <div class="hint" style="margin-top:8px;">PNG, JPG, JPEG, or WEBP. Maximum 8 MB.</div>
+    <input class="input mono" id="taskProofReference" maxlength="160" placeholder="Optional transaction/reference ID" style="margin-top:12px;">
+    <textarea class="input" id="taskProofNote" rows="3" maxlength="1000" placeholder="Optional note for the requester" style="margin-top:12px;"></textarea>
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-secondary btn-block" id="taskProofCancel">Cancel</button>
+      <button class="btn btn-primary btn-block" id="taskProofSubmit">Confirm Paid <span class="spinner"></span></button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/main.js"></script>
 <script src="/js/store.js"></script>
 <script src="/js/dashboard.js"></script>

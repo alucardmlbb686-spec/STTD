@@ -15,6 +15,32 @@ document.addEventListener('partials:loaded', () => {
     setTimeout(() => window.location.href = '/', 700);
   });
 
+  const taskProofModal = document.getElementById('taskProofModal');
+  let pendingTaskId = null;
+  function openTaskProof(requestId){
+    pendingTaskId = requestId;
+    document.getElementById('taskProofFile').value = '';
+    document.getElementById('taskProofReference').value = '';
+    document.getElementById('taskProofNote').value = '';
+    taskProofModal.classList.add('show');
+  }
+  document.getElementById('taskProofCancel').addEventListener('click', () => taskProofModal.classList.remove('show'));
+  taskProofModal.addEventListener('click', event => { if (event.target === taskProofModal) taskProofModal.classList.remove('show'); });
+  document.getElementById('taskProofSubmit').addEventListener('click', async function(){
+    const file = document.getElementById('taskProofFile').files[0];
+    if (!file){ SC.toast('Choose a payment proof image first.', 'error'); return; }
+    if (file.size > 8 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)){ SC.toast('Use a PNG, JPG, JPEG, or WEBP image up to 8 MB.', 'error'); return; }
+    SC.setLoading(this, true);
+    try {
+      await SCStore.uploadProof(pendingTaskId, file, { transactionReference: document.getElementById('taskProofReference').value.trim(), note: document.getElementById('taskProofNote').value.trim() });
+      taskProofModal.classList.remove('show');
+      SC.toast('Payment proof sent to the requester.', 'success');
+      if (requestedSection === 'tasks') await renderAccountSection('tasks', user);
+      else await render();
+    } catch (error) { SC.toast(error.message, 'error'); }
+    finally { SC.setLoading(this, false); }
+  });
+
   const requestedSection = new URLSearchParams(window.location.search).get('section');
   if (requestedSection === 'wallet' || requestedSection === 'settings' || requestedSection === 'tasks') {
     document.querySelectorAll('.side-nav a[data-page]').forEach(link => {
@@ -70,6 +96,7 @@ document.addEventListener('partials:loaded', () => {
       emptyState('Nothing accepted yet', 'Once a peer accepts your request, it will show here.');
     taskList.innerHTML = tasks.length ? tasks.slice(0,4).map(taskRowHtml).join('') :
       emptyState('No tasks yet', 'Requests you accept from other users will appear here.');
+    SC.qsa('.task-proof-btn').forEach(button => button.addEventListener('click', () => openTaskProof(button.dataset.id)));
 
     const activity = [...mine].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,6);
     activityList.innerHTML = activity.map(r => `
@@ -109,6 +136,8 @@ document.addEventListener('partials:loaded', () => {
 
   function taskRowHtml(r){
     const meta = SC.methodMeta(r.method);
+    const canConfirmPaid = ['accepted', 'payment_pending', 'in_progress'].includes(r.status);
+    const taskStatus = ['under_admin_review', 'completed'].includes(r.status) ? 'Task completed' : SC.statusBadge(r.status);
     return `
       <div class="request-row">
         <div class="req-icon">${SC.methodIcon(r.method)}</div>
@@ -118,8 +147,9 @@ document.addEventListener('partials:loaded', () => {
         </div>
         <div class="req-side">
           <div class="req-amt">+${SC.fmtMoney(r.reward)}</div>
-          ${SC.statusBadge(r.status)}
+          ${taskStatus}
         </div>
+        ${canConfirmPaid ? `<button class="btn btn-primary btn-sm task-proof-btn" data-id="${r.id}">Confirm Paid</button>` : ''}
       </div>
     `;
   }
@@ -153,6 +183,7 @@ document.addEventListener('partials:loaded', () => {
         <div class="card"><div class="panel-head"><h3>${tasks.length} accepted task${tasks.length === 1 ? '' : 's'}</h3><span class="pill-tag">Live</span></div>
           ${tasks.length ? tasks.map(taskRowHtml).join('') : emptyState('No accepted tasks', 'Accept a request from Browse requests to start a task.')}
         </div>`;
+      SC.qsa('.task-proof-btn').forEach(button => button.addEventListener('click', () => openTaskProof(button.dataset.id)));
       return;
     }
     if (section === 'wallet') {
