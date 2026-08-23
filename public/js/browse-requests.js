@@ -127,8 +127,8 @@ document.addEventListener('partials:loaded', () => {
         </div>
         <div class="rc-foot">
           <div><div class="rc-id">${r.id}</div><div class="cell-muted">${r.requester} · ${SC.timeAgo(r.createdAt)}</div></div>
-          <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm ${isFulfiller && r.status === 'accepted' ? 'proof-btn' : 'accept-btn'}" data-id="${r.id}" ${canAccept || (isFulfiller && r.status === 'accepted') ? '' : 'disabled'}>
-            ${canAccept ? 'Accept Request' : isFulfiller && r.status === 'accepted' ? 'Submit proof' : statusLabel(r.status)}
+          <button class="btn ${canAccept ? 'btn-primary' : 'btn-secondary'} btn-sm ${isFulfiller && ['accepted','payment_pending','in_progress'].includes(r.status) ? 'proof-btn' : 'accept-btn'}" data-id="${r.id}" ${canAccept || (isFulfiller && ['accepted','payment_pending','in_progress'].includes(r.status)) ? '' : 'disabled'}>
+            ${canAccept ? 'Accept Request' : isFulfiller && ['accepted','payment_pending','in_progress'].includes(r.status) ? 'Mark Payment as Sent' : statusLabel(r.status)}
           </button>
         </div>
       </div>
@@ -176,7 +176,8 @@ document.addEventListener('partials:loaded', () => {
     SC.qsa('.proof-btn').forEach(btn => btn.addEventListener('click', () => {
       pendingId = btn.dataset.id;
       document.getElementById('proofFile').value = '';
-      document.getElementById('proofDetails').value = '';
+        document.getElementById('proofReference').value = '';
+        document.getElementById('proofDetails').value = '';
       document.getElementById('proofModal').classList.add('show');
     }));
     SC.qsa('.accept-btn').forEach(btn => {
@@ -225,7 +226,7 @@ document.addEventListener('partials:loaded', () => {
     if (file.size > 8 * 1024 * 1024 || !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)){ SC.toast('Use a PNG, JPG, JPEG, or WEBP image up to 8 MB.', 'error'); return; }
     SC.setLoading(this, true);
     try {
-      await SCStore.uploadProof(pendingId, file);
+      await SCStore.uploadProof(pendingId, file, { transactionReference: document.getElementById('proofReference').value.trim(), note: document.getElementById('proofDetails').value.trim() });
       proofModal.classList.remove('show');
       SC.toast(`${pendingId} is awaiting requester confirmation.`, 'success');
       await refresh();

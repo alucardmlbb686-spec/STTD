@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const createWalletRouter = require('./routes/wallet');
 const coinbase = require('./services/coinbaseService');
+const escrow = require('./services/escrowService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -84,7 +85,7 @@ function publicUser(row){ return { id: row.id, name: row.full_name, email: row.e
 function publicRequest(row, viewerId, viewerRole){
   const isOwner = viewerId === row.requester_id;
   const isFulfiller = viewerId === row.fulfiller_id;
-  const canViewPrivate = isOwner || isFulfiller || viewerRole === 'admin';
+    const canViewPrivate = isOwner || isFulfiller || ['admin', 'super_admin'].includes(viewerRole);
   return {
     id: row.id, requester: row.requester_name, requesterId: row.requester_id, fulfiller: row.fulfiller_name,
     recipientName: row.recipient_name,
@@ -94,7 +95,8 @@ function publicRequest(row, viewerId, viewerRole){
     escrowMode: row.escrow_mode, cdpAccountId: canViewPrivate ? row.cdp_account_id : undefined, cdpTransactionId: canViewPrivate ? row.cdp_transaction_id : undefined,
     depositAddress: canViewPrivate ? row.deposit_address : undefined, depositMemo: canViewPrivate ? row.deposit_memo : undefined, depositAmount: canViewPrivate ? Number(row.deposit_amount || 0) : undefined,
     requiredConfirmations: row.required_confirmations, confirmations: row.confirmations,
-    depositStatus: row.deposit_status, status: row.status, proof: row.proof_details ? { details: row.proof_details, submittedAt: row.proof_submitted_at } : null,
+    depositStatus: row.deposit_status, status: row.status, proof: (row.proof_details || row.proof_file_path) ? { details: row.proof_details, fileName: row.proof_file_name, transactionReference: row.proof_transaction_reference, note: row.proof_note, status: row.proof_status, submittedAt: row.proof_submitted_at, url: `/api/requests/${row.id}/payment-proof` } : null,
+    escrowStatus: row.escrow_status, releaseStatus: row.release_status, providerTransactionId: canViewPrivate ? row.provider_transaction_id : undefined, releasedAt: canViewPrivate ? row.released_at : undefined, fulfillerWallet: canViewPrivate ? row.fulfiller_wallet : undefined,
     dispute: row.dispute_reason ? { reason: row.dispute_reason } : null, reputation: row.requester_completed_requests, completedRequests: row.requester_completed_requests,
     createdAt: row.created_at, mine: row.requester_id === viewerId,
   };
@@ -112,7 +114,7 @@ async function requireUser(req, res, next){
 }
 
 function requireAdmin(req, res, next){
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  if (!['admin', 'super_admin'].includes(req.user?.role)) return res.status(403).json({ error: 'Admin access required' });
   next();
 }
 
@@ -169,7 +171,15 @@ app.patch('/api/auth/me', requireUser, async (req, res, next) => {
   }catch(error){ if (error.code === '23505') return res.status(409).json({ error: 'That email is already in use' }); next(error); }
 });
 
-const requestSelect = `SELECT r.*, requester.full_name AS requester_name, requester.completed_requests AS requester_completed_requests, fulfiller.full_name AS fulfiller_name FROM requests r JOIN users requester ON requester.id = r.requester_id LEFT JOIN users fulfiller ON fulfiller.id = r.fulfiller_id`;
+const requestSelect = `SELECT r.*, requester.full_name AS requester_name, requester.completed_requests AS requester_completed_requests, fulfiller.full_name AS fulfiller_name, latest_proof.file_path AS proof_file_path, latest_proof.file_name AS proof_file_name, latest_proof.status AS proof_status, latest_proof.transaction_reference AS proof_transaction_reference, latest_proof.note AS proof_note FROM requests r JOIN users requester ON requester.id = r.requester_id LEFT JOIN users fulfiller ON fulfiller.id = r.fulfiller_id LEFT JOIN LATERAL (SELECT pp.* FROM payment_proofs pp WHERE pp.request_id = r.id ORDER BY pp.created_at DESC LIMIT 1) latest_proof ON true`;
+
+async function notify(userId, requestId, type, message){
+  await query('INSERT INTO notifications (user_id, request_id, type, message) VALUES ($1,$2,$3,$4)', [userId, requestId, type, message]);
+}
+
+async function logAdminAction(client, adminId, requestId, action, previousStatus, newStatus, note){
+  await client.query('INSERT INTO admin_action_logs (admin_id, request_id, action, previous_status, new_status, note) VALUES ($1,$2,$3,$4,$5,$6)', [adminId, requestId, action, previousStatus, newStatus, note || null]);
+}
 
 app.use('/api/wallet', createWalletRouter({ requireUser, requireAdmin, query: (...args) => query(...args) }));
 
@@ -270,6 +280,7 @@ app.post('/api/requests/:id/accept', requireUser, async (req, res, next) => {
     const result = await query(`UPDATE requests SET fulfiller_id = $1, fulfiller_wallet = $2, status = 'payment_pending' WHERE id = $3 AND status = 'open' AND deposit_status = 'confirmed' AND requester_id <> $1 RETURNING id`, [req.user.id, req.body.walletAddress.trim(), req.params.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is no longer available' });
     await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'open', 'accepted', $2),($1, 'accepted', 'payment_pending', $2)`, [req.params.id, req.user.id]);
+    await notify((await query('SELECT requester_id FROM requests WHERE id = $1', [req.params.id])).rows[0].requester_id, req.params.id, 'request_accepted', 'Your request was accepted. The receiver can now submit payment proof.');
     res.json({ status: 'payment_pending' });
   }catch(error){ next(error); }
 });
@@ -286,10 +297,11 @@ app.post('/api/requests/:id/payment-proof', requireUser, proofUpload.single('pro
   try{
     if (!req.file) return res.status(400).json({ error: 'A PNG, JPG, JPEG, or WEBP proof image is required' });
     if (!validImageSignature(req.file.path, req.file.mimetype)) { fs.unlinkSync(req.file.path); return res.status(400).json({ error: 'Uploaded file content does not match a supported image type' }); }
-    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'payment_proof_submitted' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','payment_pending','in_progress') RETURNING id`, [req.file.filename, req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET proof_details = $1, proof_submitted_at = now(), status = 'payment_proof_submitted' WHERE id = $2 AND fulfiller_id = $3 AND status IN ('accepted','payment_pending','in_progress') RETURNING id, requester_id`, [req.file.filename, req.params.id, req.user.id]);
     if (!result.rows[0]) { fs.unlinkSync(req.file.path); return res.status(409).json({ error: 'Only the accepted fulfiller can submit proof for an in-progress request' }); }
-    await query(`INSERT INTO payment_proofs (request_id, user_id, file_path, file_name, mime_type, file_size) VALUES ($1,$2,$3,$4,$5,$6)`, [req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size]);
+    await query(`INSERT INTO payment_proofs (request_id, user_id, file_path, file_name, mime_type, file_size, transaction_reference, note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [req.params.id, req.user.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.body.transactionReference?.trim() || null, req.body.note?.trim() || null]);
     await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_pending', 'payment_proof_submitted', $2)`, [req.params.id, req.user.id]);
+    await notify(result.rows[0].requester_id, req.params.id, 'proof_submitted', 'Payment proof was submitted and is ready for your review.');
     res.status(201).json({ status: 'payment_proof_submitted', proof: { fileName: req.file.originalname, uploadedAt: new Date().toISOString() } });
   }catch(error){ if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path); next(error); }
 });
@@ -343,7 +355,7 @@ app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) =
   try{
     const result = await query(`SELECT pp.file_path, pp.file_name, r.requester_id, r.fulfiller_id FROM payment_proofs pp JOIN requests r ON r.id = pp.request_id WHERE pp.request_id = $1 ORDER BY pp.created_at DESC LIMIT 1`, [req.params.id]);
     const proof = result.rows[0];
-    if (!proof || (req.user.id !== proof.requester_id && req.user.id !== proof.fulfiller_id && req.user.role !== 'admin')) return res.status(404).json({ error: 'Payment proof not found' });
+    if (!proof || (req.user.id !== proof.requester_id && req.user.id !== proof.fulfiller_id && !['admin', 'super_admin'].includes(req.user.role))) return res.status(404).json({ error: 'Payment proof not found' });
     const filePath = path.join(PROOF_DIR, path.basename(proof.file_path));
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Payment proof file unavailable' });
     res.type(path.extname(filePath)).sendFile(filePath);
@@ -360,20 +372,50 @@ app.post('/api/requests/:id/proof', requireUser, async (req, res, next) => {
 
 app.post('/api/requests/:id/confirm', requireUser, async (req, res, next) => {
   try{
-    const result = await query(`UPDATE requests SET status = 'confirmed', completed_at = now() WHERE id = $1 AND requester_id = $2 AND status = 'payment_proof_submitted' RETURNING id`, [req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') RETURNING id`, [req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting payment confirmation' });
-    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'confirmed', $2)`, [req.params.id, req.user.id]);
-    res.json({ status: 'confirmed' });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'under_admin_review', $2)`, [req.params.id, req.user.id]);
+    await notifyAdminForRequest(req.params.id, 'Requester confirmed payment and is awaiting escrow review.');
+    res.json({ status: 'under_admin_review' });
   }catch(error){ next(error); }
 });
 
 app.post('/api/requests/:id/dispute', requireUser, async (req, res, next) => {
   try{
-    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1 WHERE id = $2 AND (requester_id = $3 OR fulfiller_id = $3) AND status IN ('awaiting_confirmation','under_admin_review') RETURNING id`, [req.body.reason?.trim() || 'Issue reported by user', req.params.id, req.user.id]);
+    const participant = await getParticipantRequest(req.params.id, req.user.id);
+    if (!participant || participant.requester_id !== req.user.id) return res.status(403).json({ error: 'Only the requester can report a problem' });
+    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review') RETURNING id`, [req.body.reason?.trim() || 'Issue reported by user', req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request cannot be disputed in this state' });
     res.json({ status: 'disputed' });
   }catch(error){ next(error); }
 });
+
+app.post('/api/requests/:id/confirm-payment', requireUser, async (req, res, next) => {
+  try {
+    const result = await query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') RETURNING id`, [req.params.id, req.user.id]);
+    if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting payment confirmation' });
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'under_admin_review', $2)`, [req.params.id, req.user.id]);
+    await notifyAdminForRequest(req.params.id, 'Requester confirmed payment and is awaiting escrow review.');
+    res.json({ status: 'under_admin_review' });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/requests/:id/report-problem', requireUser, async (req, res, next) => {
+  try {
+    const reason = req.body.reason?.trim() || 'Issue reported by user';
+    const participant = await getParticipantRequest(req.params.id, req.user.id);
+    if (!participant || participant.requester_id !== req.user.id) return res.status(403).json({ error: 'Only the requester can report a problem' });
+    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review') RETURNING id`, [reason, req.params.id, req.user.id]);
+    if (!result.rows[0]) return res.status(409).json({ error: 'Request cannot be disputed in its current state' });
+    await notifyAdminForRequest(req.params.id, `Requester reported a problem: ${reason}`);
+    res.json({ status: 'disputed' });
+  } catch (error) { next(error); }
+});
+
+async function notifyAdminForRequest(requestId, message){
+  const admins = await query(`SELECT id FROM users WHERE role IN ('admin','super_admin')`);
+  await Promise.all(admins.rows.map(admin => notify(admin.id, requestId, 'admin_review', message)));
+}
 
 app.post('/api/requests/:id/cancel', requireUser, async (req, res, next) => {
   try{
@@ -451,6 +493,7 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
       await client.query('COMMIT');
       return res.json({ status: 'confirmed', message: 'Payment proof approved. Escrow is ready for release.' });
     }
+    if (['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Use the release-funds endpoint after explicit admin confirmation' }); }
     if (!['confirmed', 'under_admin_review'].includes(row.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: `Request is not ready for escrow release. Current status: ${row.status}` }); }
     if (!row.fulfiller_id || row.deposit_status !== 'confirmed' || !row.deposit_amount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Escrow is not locked' }); }
     const destination = (req.body.destinationAddress || row.fulfiller_wallet)?.trim();
@@ -469,6 +512,81 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     res.json({ status: 'completed', withdrawalStatus: externalTransactionId ? 'confirmed' : 'pending', settlementMode, externalTransactionId });
   }catch(error){ await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
+app.get('/api/admin/escrow-reviews', requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review','disputed','confirmed') ORDER BY r.created_at ASC`);
+    res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)) });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await query(`${requestSelect} WHERE r.id = $1`, [req.params.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Request not found' });
+    res.json({ request: publicRequest(result.rows[0], req.user.id, req.user.role) });
+  } catch (error) { next(error); }
+});
+
+async function adminProofAction(req, res, next, action){
+  const note = req.body.note?.trim();
+  if (!note && ['reject-proof', 'request-new-proof', 'dispute'].includes(action)) return res.status(400).json({ error: 'An admin reason is required' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM requests WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const request = result.rows[0];
+    if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
+    let newStatus = request.status;
+    if (action === 'approve-proof') {
+      if (!['payment_proof_submitted', 'under_admin_review', 'awaiting_confirmation'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No submitted proof is awaiting approval' }); }
+      await client.query(`UPDATE payment_proofs SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE request_id = $2 AND status = 'submitted'`, [req.user.id, request.id]);
+    } else if (action === 'reject-proof' || action === 'request-new-proof') {
+      if (!['payment_proof_submitted', 'under_admin_review', 'awaiting_confirmation'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No submitted proof is awaiting review' }); }
+      await client.query(`UPDATE payment_proofs SET status = 'rejected', reviewed_by = $1, reviewed_at = now() WHERE request_id = $2 AND status = 'submitted'`, [req.user.id, request.id]);
+      newStatus = 'payment_pending';
+      await client.query(`UPDATE requests SET status = $1, dispute_reason = NULL WHERE id = $2`, [newStatus, request.id]);
+    } else {
+      if (['released', 'completed', 'cancelled'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'This request can no longer be disputed' }); }
+      newStatus = 'disputed';
+      await client.query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2`, [note, request.id]);
+    }
+    await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1,$2,$3,$4)`, [request.id, request.status, newStatus, req.user.id]);
+    await logAdminAction(client, req.user.id, request.id, action, request.status, newStatus, note);
+    await client.query('COMMIT');
+    if (request.fulfiller_id && ['reject-proof', 'request-new-proof'].includes(action)) await notify(request.fulfiller_id, request.id, 'proof_review', `Admin requested new payment proof: ${note}`);
+    res.json({ status: newStatus });
+  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+}
+
+app.post('/api/admin/requests/:id/approve-proof', requireUser, requireAdmin, (req, res, next) => adminProofAction(req, res, next, 'approve-proof'));
+app.post('/api/admin/requests/:id/reject-proof', requireUser, requireAdmin, (req, res, next) => adminProofAction(req, res, next, 'reject-proof'));
+app.post('/api/admin/requests/:id/request-new-proof', requireUser, requireAdmin, (req, res, next) => adminProofAction(req, res, next, 'request-new-proof'));
+app.post('/api/admin/requests/:id/dispute', requireUser, requireAdmin, (req, res, next) => adminProofAction(req, res, next, 'dispute'));
+
+app.post('/api/admin/requests/:id/release-funds', requireUser, requireAdmin, async (req, res, next) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM requests WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const request = result.rows[0];
+    if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
+    const release = await escrow.releaseEscrowFunds(client, request, req.user.id);
+    const previousStatus = request.status;
+    await client.query(`UPDATE requests SET status = 'completed', release_status = 'released', escrow_status = 'released', released_at = now(), released_by = $1, provider_transaction_id = $2, completed_at = now() WHERE id = $3 AND release_status <> 'released'`, [req.user.id, release.providerTransactionId, request.id]);
+    const updated = await client.query('SELECT status FROM requests WHERE id = $1', [request.id]);
+    if (updated.rows[0].status !== 'completed') throw Object.assign(new Error('Funds have already been released'), { statusCode: 409 });
+    const releaseAmount = assetAmount(request.escrow_asset, Number(request.amount) + Number(request.reward));
+    await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [request.deposit_amount, request.requester_id, request.escrow_asset]);
+    await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status) VALUES ($1,$2,$3,$4,$5,$6,'pending') ON CONFLICT (request_id) DO NOTHING`, [request.id, request.fulfiller_id, request.escrow_asset, request.fulfiller_wallet, releaseAmount, release.providerTransactionId]);
+    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6),($7,$2,$3,'withdrawal',$4,$5,'completed',$6)`, [request.requester_id, request.id, request.escrow_asset, releaseAmount, release.providerTransactionId, JSON.stringify({ releasedBy: req.user.id, simulated: release.simulated }), request.fulfiller_id]);
+    await logAdminAction(client, req.user.id, request.id, 'release-funds', previousStatus, 'completed', req.body.note);
+    await client.query('COMMIT');
+    await notify(request.requester_id, request.id, 'funds_released', 'Payment completed and escrow funds have been released.');
+    await notify(request.fulfiller_id, request.id, 'funds_released', 'Funds have been released to your wallet.');
+    res.json({ status: 'completed', providerTransactionId: release.providerTransactionId, transactionReference: release.providerTransactionId });
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); next(error); } finally { client.release(); }
+});
+
 app.post('/api/admin/withdrawals/:id/confirm', requireUser, requireAdmin, async (req, res, next) => {
   const client = await db.connect();
   try{
@@ -502,13 +620,16 @@ app.get('/health', async (req, res) => {
 async function initializeDatabase(){
   if (!db) return;
   await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
-  await db.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS deposit_address TEXT, ADD COLUMN IF NOT EXISTS deposit_memo TEXT, ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(28,8), ADD COLUMN IF NOT EXISTS required_confirmations INTEGER NOT NULL DEFAULT 3, ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS fulfiller_wallet TEXT, ADD COLUMN IF NOT EXISTS escrow_mode TEXT NOT NULL DEFAULT 'real', ADD COLUMN IF NOT EXISTS cdp_account_id TEXT, ADD COLUMN IF NOT EXISTS cdp_transaction_id TEXT`);
+  await db.query(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS deposit_address TEXT, ADD COLUMN IF NOT EXISTS deposit_memo TEXT, ADD COLUMN IF NOT EXISTS deposit_amount NUMERIC(28,8), ADD COLUMN IF NOT EXISTS required_confirmations INTEGER NOT NULL DEFAULT 3, ADD COLUMN IF NOT EXISTS confirmations INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS fulfiller_wallet TEXT, ADD COLUMN IF NOT EXISTS escrow_mode TEXT NOT NULL DEFAULT 'real', ADD COLUMN IF NOT EXISTS cdp_account_id TEXT, ADD COLUMN IF NOT EXISTS cdp_transaction_id TEXT, ADD COLUMN IF NOT EXISTS escrow_status TEXT NOT NULL DEFAULT 'pending', ADD COLUMN IF NOT EXISTS release_status TEXT NOT NULL DEFAULT 'not_released', ADD COLUMN IF NOT EXISTS provider_transaction_id TEXT`);
+  await db.query(`ALTER TABLE payment_proofs ADD COLUMN IF NOT EXISTS transaction_reference TEXT, ADD COLUMN IF NOT EXISTS note TEXT`);
   await db.query(`ALTER TABLE requests DROP CONSTRAINT IF EXISTS requests_escrow_asset_check, DROP CONSTRAINT IF EXISTS requests_status_check`);
   await db.query(`ALTER TABLE wallets DROP CONSTRAINT IF EXISTS wallets_asset_check`);
   await db.query(`ALTER TABLE deposit_addresses DROP CONSTRAINT IF EXISTS deposit_addresses_asset_check`);
   await db.query(`ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS ledger_entries_asset_check`);
   await db.query(`ALTER TABLE withdrawals DROP CONSTRAINT IF EXISTS withdrawals_asset_check`);
   await db.query(`ALTER TABLE requests ADD CONSTRAINT requests_escrow_asset_check CHECK (escrow_asset IN ('USDC','USDT','BTC')), ADD CONSTRAINT requests_status_check CHECK (status IN ('draft','awaiting_deposit','deposit_confirming','funded','open','accepted','payment_pending','payment_proof_submitted','confirmed','released','in_progress','awaiting_confirmation','under_admin_review','completed','disputed','cancelled'))`);
+  await db.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+  await db.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('member','admin','super_admin'))`);
   await db.query(`UPDATE requests SET fee = ROUND((amount + reward) * 0.025, 2), total = amount + reward + ROUND((amount + reward) * 0.025, 2) WHERE fee <> ROUND((amount + reward) * 0.025, 2) OR total <> amount + reward + ROUND((amount + reward) * 0.025, 2)`);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD){
     const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);

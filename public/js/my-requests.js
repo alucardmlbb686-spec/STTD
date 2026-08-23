@@ -116,7 +116,10 @@ document.addEventListener('partials:loaded', () => {
       <div class="kv-row"><span class="k">Escrow</span><span class="v">${r.escrowAsset || 'USDT'} · ${r.depositStatus || 'pending'}</span></div>
       <div class="kv-row"><span class="k">Reason</span><span class="v">${r.reason || '—'}</span></div>
       <div class="kv-row"><span class="k">Due</span><span class="v">${r.dueAt ? new Date(r.dueAt).toLocaleString() : '—'}</span></div>
-      <div class="kv-row"><span class="k">Payment proof</span><span class="v" style="max-width:220px; text-align:right;">${r.proof?.details || 'Not submitted'}</span></div>
+      <div class="kv-row"><span class="k">Payment proof</span><span class="v" style="max-width:220px; text-align:right;">${r.proof ? `<a href="${r.proof.url}" target="_blank" rel="noreferrer" style="color:var(--star-400);">View screenshot</a>` : 'Not submitted'}</span></div>
+      <div class="kv-row"><span class="k">Transaction/reference</span><span class="v" style="max-width:220px; text-align:right;">${r.proof?.transactionReference || '—'}</span></div>
+      <div class="kv-row"><span class="k">Receiver note</span><span class="v" style="max-width:220px; text-align:right;">${r.proof?.note || '—'}</span></div>
+      <div class="kv-row"><span class="k">Proof submitted</span><span class="v">${r.proof?.submittedAt ? new Date(r.proof.submittedAt).toLocaleString() : '—'}</span></div>
       <div class="kv-row"><span class="k">Posted</span><span class="v">${SC.timeAgo(r.createdAt)}</span></div>
       <div class="kv-row"><span class="k">Note</span><span class="v" style="max-width:220px; text-align:right;">${r.note || '—'}</span></div>
     `;
@@ -148,7 +151,9 @@ document.addEventListener('partials:loaded', () => {
     render();
   });
   document.getElementById('detailDisputeReq').addEventListener('click', async () => {
-    await SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: 'Requester reported an issue.' } });
+    const reason = window.prompt('Why are you reporting a problem with this payment?');
+    if (!reason?.trim()) return;
+    await SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: reason.trim() } });
     detailModal.classList.remove('show');
     SC.toast('Issue reported for admin review.', 'success');
     render();

@@ -30,6 +30,9 @@ Then open **http://localhost:3000**.
 - For Coinbase CDP Sandbox, set `ESCROW_MODE=sandbox`, `COINBASE_ENV=sandbox`, and `CDP_ACCOUNT_ID`. Sandbox requests support only `USDC` and `USDT`; no BTC/USDT deposit address is required.
 - Sandbox funding is an explicit simulation tied to the configured CDP Account ID. It creates a `sandbox_cdp_*` transaction reference, ledger deposit, escrow lock, and then moves `awaiting_deposit -> funded -> open`. It does not claim that Coinbase broadcast a real blockchain transaction.
 - The sandbox lifecycle is `draft -> awaiting_deposit -> funded -> open -> accepted -> payment_pending -> payment_proof_submitted -> confirmed -> released -> completed`.
+- Completion requires the assigned receiver to upload an image proof with an optional transaction reference and note. The requester reviews the protected proof, confirms payment or reports a reasoned problem, and only then can an authorized admin release escrow.
+- Admin review endpoints are `GET /api/admin/escrow-reviews`, `GET /api/admin/requests/:id/review`, `POST /api/admin/requests/:id/approve-proof`, `POST /api/admin/requests/:id/reject-proof`, `POST /api/admin/requests/:id/request-new-proof`, `POST /api/admin/requests/:id/dispute`, and `POST /api/admin/requests/:id/release-funds`.
+- `release-funds` requires `admin` or `super_admin`, locks the request row, rejects disputed or already released requests, writes an `admin_action_logs` record, creates ledger release entries, and returns a sandbox provider-shaped transaction ID. It never runs automatically.
 - Configure `BLOCKCHAIN_WEBHOOK_SECRET` and have your blockchain provider call `POST /api/webhooks/blockchain` with `x-blockchain-secret`, `txHash`, `asset`, `amount`, and `confirmations`. The webhook records the deposit, waits for the required confirmations, and atomically locks the funds.
 - Wallet balances and `ledger_entries` track deposits, escrow locks, releases, withdrawals, confirmations, and transaction hashes. Admin release creates a pending withdrawal; the custody provider or admin confirms it through `POST /api/admin/withdrawals/:id/confirm`.
 - Coinbase testing uses the official `@coinbase/coinbase-sdk` on Base Sepolia. Configure `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and `CDP_WALLET_SECRET` from the Coinbase Developer Platform. The SDK uses the CDP API ID and secret for authentication; the wallet secret remains server-only and is never returned to clients. The SDK supports developer-custodied test wallets, balances, faucet requests, and ETH/USDC transfers. Coinbase does not provide StarCurrency escrow, and this SDK flow does not support BTC/USDT settlement; those assets remain in the PostgreSQL ledger-only simulation until a compatible custody/network adapter is installed.
@@ -55,6 +58,16 @@ CDP_WALLET_SECRET=PASTE_YOUR_WALLET_SECRET_HERE
 7. Start the app with `npm start` and test the request flow from `/create-request.html`.
 
 Coinbase sandbox limitations: the official Node SDK documents Base Sepolia developer-custodied wallets, faucet funding, balances, and ETH/USDC transfers. It does not provide StarCurrency escrow and does not make BTC/USDT a supported Base Sepolia release asset. Therefore BTC/USDT requests use the PostgreSQL escrow/ledger state and can be released only through a configured custody/network adapter; the response labels this as `ledger_only_simulation` rather than claiming a Coinbase transaction.
+
+## Completion workflow test
+
+1. Set `ESCROW_MODE=sandbox`, configure `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and the CDP variables in `.env`.
+2. Start the app with `npm start`, register two member accounts, and sign in as the requester.
+3. Create a request and use the sandbox funding action until its status is `open`.
+4. Sign in as the second member, accept the request, open the receiver action, and submit a PNG/JPG/WEBP proof with an optional reference and note.
+5. Return to the requester account, open the request, inspect the protected screenshot, then choose `Confirm Payment Received` or `Report a Problem` with a reason.
+6. Sign in as the admin at `/admin-dashboard.html?section=payment-review`. Approve or reject proof, request new proof, or mark a dispute. Only a confirmed/non-disputed request exposes `Release Funds`.
+7. Confirm the release dialog. Verify both users see the completed state and the returned `sandbox_release_*` transaction reference. Repeat the release request to verify it is rejected as already released.
 - Shared layout pieces (navbar, footer, sidebar, admin sidebar, topbar) live in `public/partials/` and are injected at runtime via `data-include` attributes — see `public/js/main.js`.
 - Design tokens (colors, type, spacing, radii, shadows) live in `public/css/tokens.css`; component styles are split across `base.css`, `components.css`, `landing.css`, `auth.css`, and `app.css`.
 

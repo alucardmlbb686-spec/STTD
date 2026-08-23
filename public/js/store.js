@@ -36,8 +36,8 @@ const SCStore = (() => {
     else if (changes.txHash) payload = await api(`/api/requests/${id}/deposit`, { method: 'POST', body: JSON.stringify({ txHash: changes.txHash }) });
     else if (changes.proof) payload = await api(`/api/requests/${id}/proof`, { method: 'POST', body: JSON.stringify({ details: changes.proof.details }) });
     else if (changes.status === 'accepted') payload = await api(`/api/requests/${id}/accept`, { method: 'POST', body: JSON.stringify({ walletAddress: changes.walletAddress }) });
-    else if (changes.status === 'under_admin_review') payload = await api(`/api/requests/${id}/confirm`, { method: 'POST' });
-    else if (changes.status === 'disputed') payload = await api(`/api/requests/${id}/dispute`, { method: 'POST', body: JSON.stringify({ reason: changes.dispute?.reason }) });
+    else if (changes.status === 'under_admin_review') payload = await api(`/api/requests/${id}/confirm-payment`, { method: 'POST' });
+    else if (changes.status === 'disputed') payload = await api(`/api/requests/${id}/report-problem`, { method: 'POST', body: JSON.stringify({ reason: changes.dispute?.reason }) });
     else if (changes.status === 'cancelled') payload = await api(`/api/requests/${id}/cancel`, { method: 'POST' });
     else payload = { status: changes.status };
     const record = requestCache.find(request => request.id === id);
@@ -46,9 +46,11 @@ const SCStore = (() => {
   }
 
   async function updateStatus(id, status){ return update(id, { status }); }
-  async function uploadProof(id, file){
+  async function uploadProof(id, file, metadata = {}){
     const formData = new FormData();
     formData.append('proof', file);
+    if (metadata.transactionReference) formData.append('transactionReference', metadata.transactionReference);
+    if (metadata.note) formData.append('note', metadata.note);
     const response = await fetch(`/api/requests/${id}/payment-proof`, { method: 'POST', body: formData, credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Payment proof upload failed');

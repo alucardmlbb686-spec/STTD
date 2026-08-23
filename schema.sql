@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin', 'super_admin')),
   completed_requests INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS requests (
   completed_at TIMESTAMPTZ,
   released_at TIMESTAMPTZ,
   released_by UUID REFERENCES users(id),
+  escrow_status TEXT NOT NULL DEFAULT 'pending',
+  release_status TEXT NOT NULL DEFAULT 'not_released',
+  provider_transaction_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -117,6 +120,8 @@ CREATE TABLE IF NOT EXISTS payment_proofs (
   file_name TEXT NOT NULL,
   mime_type TEXT NOT NULL CHECK (mime_type IN ('image/png', 'image/jpeg', 'image/webp')),
   file_size INTEGER NOT NULL CHECK (file_size > 0),
+  transaction_reference TEXT,
+  note TEXT,
   status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'approved', 'rejected')),
   reviewed_by UUID REFERENCES users(id),
   reviewed_at TIMESTAMPTZ,
@@ -134,6 +139,31 @@ CREATE TABLE IF NOT EXISTS request_status_history (
 
 CREATE UNIQUE INDEX IF NOT EXISTS payment_proofs_one_submitted_idx ON payment_proofs (request_id) WHERE status = 'submitted';
 CREATE INDEX IF NOT EXISTS request_status_history_idx ON request_status_history (request_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_action_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_id UUID NOT NULL REFERENCES users(id),
+  request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  previous_status TEXT,
+  new_status TEXT,
+  note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS admin_action_logs_request_idx ON admin_action_logs (request_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_id UUID REFERENCES requests(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
