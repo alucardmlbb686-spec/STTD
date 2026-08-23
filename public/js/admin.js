@@ -113,26 +113,7 @@ document.addEventListener('partials:loaded', async () => {
       return action ? `<button class="btn btn-secondary btn-sm admin-review-btn" data-id="${request.id}">${action}</button>` : `<span class="cell-muted">No action</span>`;
     }
 
-    document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', async () => {
-      const request = all.find(item => item.id === button.dataset.id);
-      if (!request) return;
-      try {
-        let result;
-        if (request.status === 'deposit_confirming') {
-          result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
-        } else if (['payment_proof_submitted','awaiting_confirmation'].includes(request.status)) {
-          result = await SCStore.api(`/api/admin/requests/${request.id}/approve`, { method: 'POST' });
-        } else if (request.status === 'under_admin_review') {
-          const destinationAddress = window.prompt('Enter the fulfiller withdrawal wallet address:');
-          if (!destinationAddress) return;
-          result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST', body: JSON.stringify({ destinationAddress }) });
-        } else {
-          result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST' });
-        }
-        SC.toast(`${request.id} updated to ${result.status}.`, 'success'); render();
-      }
-      catch (error) { SC.toast(error.message, 'error'); }
-    }));
+    document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', () => reviewRequest(button.dataset.id, all, render)));
 
     const methodCounts = {};
     all.forEach(r => methodCounts[r.method] = (methodCounts[r.method]||0)+1);
@@ -206,7 +187,11 @@ document.addEventListener('partials:loaded', async () => {
     const transactions = all.filter(request => ['accepted', 'completed'].includes(request.status)).slice(0, 20);
     const sectionRecords = name === 'disputes' ? disputes : name === 'transactions' ? transactions : all.slice(0, 20);
     const rows = name === 'users'
-      ? users.map(user => `<tr><td class="cell-primary">${user}</td><td>${all.filter(request => request.requester === user).length}</td><td><span class="badge badge-accepted">Active</span></td><td><button class="btn btn-secondary btn-sm">View</button></td></tr>`).join('')
+      ? users.map(user => {
+          const userRequests = all.filter(request => request.requester === user);
+          const reviewableRequest = userRequests.find(request => ['deposit_confirming', 'payment_proof_submitted', 'awaiting_confirmation', 'confirmed', 'under_admin_review'].includes(request.status));
+          return `<tr><td class="cell-primary">${user}</td><td>${userRequests.length}</td><td><span class="badge badge-accepted">Active</span></td><td><button class="btn btn-secondary btn-sm admin-user-review-btn" data-id="${reviewableRequest?.id || ''}">Review</button></td></tr>`;
+        }).join('')
       : name === 'disputes'
         ? sectionRecords.map((request, index) => `<tr><td class="cell-primary">DSP-${4821 + index}</td><td>${request.id}</td><td>${request.requester}</td><td>Payment not received</td><td><span class="badge badge-pending">Needs review</span></td><td>${SC.timeAgo(request.createdAt)}</td></tr>`).join('')
         : name === 'transactions'
@@ -225,5 +210,35 @@ document.addEventListener('partials:loaded', async () => {
       <div class="card"><div class="panel-head"><h3>${recordCount} ${name === 'users' ? 'users' : name === 'disputes' ? 'open disputes' : name === 'transactions' ? 'transactions' : 'requests'}</h3></div>
         <div class="table-wrap" style="border:none;"><table class="data-table"><thead><tr>${headers}</tr></thead><tbody>${rows || `<tr><td colspan="6" class="cell-muted">No ${name} found.</td></tr>`}</tbody></table></div>
       </div>`;
+
+    document.querySelectorAll('.admin-user-review-btn').forEach(button => button.addEventListener('click', () => {
+      if (!button.dataset.id) {
+        SC.toast('This user has no requests ready for review.', 'info');
+        return;
+      }
+      reviewRequest(button.dataset.id, all, () => renderSection(name));
+    }));
+  }
+
+  async function reviewRequest(requestId, requests, onComplete){
+    const request = requests.find(item => item.id === requestId);
+    if (!request) return;
+    try {
+      let result;
+      if (request.status === 'deposit_confirming') {
+        result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
+      } else if (['payment_proof_submitted','awaiting_confirmation'].includes(request.status)) {
+        result = await SCStore.api(`/api/admin/requests/${request.id}/approve`, { method: 'POST' });
+      } else if (request.status === 'under_admin_review') {
+        const destinationAddress = window.prompt('Enter the fulfiller withdrawal wallet address:');
+        if (!destinationAddress) return;
+        result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST', body: JSON.stringify({ destinationAddress }) });
+      } else {
+        result = await SCStore.api(`/api/admin/requests/${request.id}/review`, { method: 'POST' });
+      }
+      SC.toast(`${request.id} updated to ${result.status}.`, 'success');
+      onComplete();
+    }
+    catch (error) { SC.toast(error.message, 'error'); }
   }
 });
