@@ -109,8 +109,8 @@ document.addEventListener('partials:loaded', async () => {
     `).join('');
 
     function adminActionButton(request){
-      const action = request.status === 'deposit_confirming' ? 'Confirm deposit' : ['payment_proof_submitted','awaiting_confirmation'].includes(request.status) ? 'Approve proof' : ['confirmed','under_admin_review'].includes(request.status) ? 'Release escrow' : null;
-      return action ? `<button class="btn btn-secondary btn-sm admin-review-btn" data-id="${request.id}">${action}</button>` : `<span class="cell-muted">No action</span>`;
+      const action = request.status === 'deposit_confirming' ? 'Confirm deposit' : ['payment_proof_submitted','awaiting_confirmation'].includes(request.status) ? 'Approve proof' : ['confirmed','under_admin_review'].includes(request.status) ? 'Release escrow' : 'Review';
+      return `<button class="btn btn-secondary btn-sm admin-review-btn" data-id="${request.id}">${action}</button>`;
     }
 
     document.querySelectorAll('.admin-review-btn').forEach(button => button.addEventListener('click', () => reviewRequest(button.dataset.id, all, render)));
@@ -223,6 +223,10 @@ document.addEventListener('partials:loaded', async () => {
   async function reviewRequest(requestId, requests, onComplete){
     const request = requests.find(item => item.id === requestId);
     if (!request) return;
+    if (!['deposit_confirming', 'payment_proof_submitted', 'awaiting_confirmation', 'confirmed', 'under_admin_review'].includes(request.status)) {
+      SC.toast(`${request.id} is currently ${request.status.replaceAll('_', ' ')} and does not need an admin action yet.`, 'info');
+      return;
+    }
     try {
       let result;
       if (request.status === 'deposit_confirming') {
