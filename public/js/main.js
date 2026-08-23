@@ -78,7 +78,7 @@ const SC = (() => {
       payment_sent: { cls: 'badge-accepted', label: 'Payment sent' },
       awaiting_confirmation: { cls: 'badge-pending', label: 'Awaiting Confirmation' },
       payment_proof_submitted: { cls: 'badge-pending', label: 'Payment Proof Submitted' },
-      payment_received: { cls: 'badge-pending', label: 'Payment Received' },
+      payment_received: { cls: 'badge-completed', label: 'Completed' },
       confirmed: { cls: 'badge-pending', label: 'Confirmed' },
       released: { cls: 'badge-completed', label: 'Released' },
       verification: { cls: 'badge-pending', label: 'Verification' },

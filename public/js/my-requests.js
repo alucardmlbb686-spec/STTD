@@ -23,12 +23,13 @@ document.addEventListener('partials:loaded', () => {
     document.getElementById('cAll').textContent = all.length;
     document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status)).length;
     document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','payment_received','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
-    document.getElementById('cCompleted').textContent = all.filter(r => r.status === 'completed').length;
+    document.getElementById('cCompleted').textContent = all.filter(r => ['payment_received', 'completed'].includes(r.status)).length;
     document.getElementById('cCancelled').textContent = all.filter(r => r.status === 'cancelled').length;
 
     let data = all;
     if (activeTab === 'open') data = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status));
     else if (activeTab === 'accepted') data = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','payment_received','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status));
+    else if (activeTab === 'completed') data = all.filter(r => ['payment_received', 'completed'].includes(r.status));
     else if (activeTab !== 'all') data = all.filter(r => r.status === activeTab);
 
     if (!data.length){
@@ -64,7 +65,7 @@ document.addEventListener('partials:loaded', () => {
     if (request.requesterId !== user.id) return '';
     if (request.status === 'accepted') return '<span class="cell-muted">Waiting for receiver to complete payment.</span>';
     if (request.status === 'payment_proof_submitted') return `<button class="btn btn-primary btn-sm review-proof-btn" data-id="${request.id}">Review Payment Proof</button>`;
-    if (request.status === 'payment_received') return '<span class="cell-muted">Payment confirmed. Waiting for fund release.</span>';
+    if (request.status === 'payment_received') return '<span class="badge badge-completed">Transaction Completed</span>';
     if (['released', 'completed'].includes(request.status)) return '<span class="badge badge-completed">Transaction Completed</span>';
     if (request.status === 'disputed') return '<span class="badge badge-failed">Transaction Under Review</span>';
     return '';
