@@ -160,9 +160,20 @@ document.addEventListener('partials:loaded', () => {
 
   document.getElementById('detailConfirmReq').addEventListener('click', async () => {
     if (!window.confirm('Confirm that you have received the payment from the receiver?')) return;
-    await SCStore.update(pendingCancelId, { status: 'payment_received' });
+    const button = document.getElementById('detailConfirmReq');
+    SC.setLoading(button, true);
+    try {
+      await SCStore.update(pendingCancelId, { status: 'payment_received' });
+      button.style.display = 'none';
+      document.getElementById('detailDisputeReq').style.display = 'none';
+      document.getElementById('detailBadge').innerHTML = SC.statusBadge('payment_received');
+      SC.toast('Payment confirmed. Waiting for admin to release the escrow funds.', 'success');
+    } catch (error) {
+      SC.toast(error.message, 'error');
+      SC.setLoading(button, false);
+      return;
+    }
     detailModal.classList.remove('show');
-    SC.toast('Completion confirmed. An authorized admin will release escrow.', 'success');
     render();
   });
   document.getElementById('detailDisputeReq').addEventListener('click', async () => {
