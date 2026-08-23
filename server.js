@@ -372,11 +372,11 @@ app.post('/api/requests/:id/proof', requireUser, async (req, res, next) => {
 
 app.post('/api/requests/:id/confirm', requireUser, async (req, res, next) => {
   try{
-    const result = await query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') RETURNING id`, [req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET status = 'payment_received' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') AND EXISTS (SELECT 1 FROM payment_proofs WHERE request_id = requests.id) RETURNING id`, [req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting payment confirmation' });
-    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'under_admin_review', $2)`, [req.params.id, req.user.id]);
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'payment_received', $2)`, [req.params.id, req.user.id]);
     await notifyAdminForRequest(req.params.id, 'Requester confirmed payment and is awaiting escrow review.');
-    res.json({ status: 'under_admin_review' });
+    res.json({ status: 'payment_received' });
   }catch(error){ next(error); }
 });
 
@@ -384,7 +384,7 @@ app.post('/api/requests/:id/dispute', requireUser, async (req, res, next) => {
   try{
     const participant = await getParticipantRequest(req.params.id, req.user.id);
     if (!participant || participant.requester_id !== req.user.id) return res.status(403).json({ error: 'Only the requester can report a problem' });
-    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review') RETURNING id`, [req.body.reason?.trim() || 'Issue reported by user', req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','payment_received','under_admin_review') RETURNING id`, [req.body.reason?.trim() || 'Issue reported by user', req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request cannot be disputed in this state' });
     res.json({ status: 'disputed' });
   }catch(error){ next(error); }
@@ -392,11 +392,11 @@ app.post('/api/requests/:id/dispute', requireUser, async (req, res, next) => {
 
 app.post('/api/requests/:id/confirm-payment', requireUser, async (req, res, next) => {
   try {
-    const result = await query(`UPDATE requests SET status = 'under_admin_review' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') RETURNING id`, [req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET status = 'payment_received' WHERE id = $1 AND requester_id = $2 AND status IN ('payment_proof_submitted','awaiting_confirmation') AND EXISTS (SELECT 1 FROM payment_proofs WHERE request_id = requests.id) RETURNING id`, [req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request is not awaiting payment confirmation' });
-    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'under_admin_review', $2)`, [req.params.id, req.user.id]);
+    await query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'payment_proof_submitted', 'payment_received', $2)`, [req.params.id, req.user.id]);
     await notifyAdminForRequest(req.params.id, 'Requester confirmed payment and is awaiting escrow review.');
-    res.json({ status: 'under_admin_review' });
+    res.json({ status: 'payment_received' });
   } catch (error) { next(error); }
 });
 
@@ -405,7 +405,7 @@ app.post('/api/requests/:id/report-problem', requireUser, async (req, res, next)
     const reason = req.body.reason?.trim() || 'Issue reported by user';
     const participant = await getParticipantRequest(req.params.id, req.user.id);
     if (!participant || participant.requester_id !== req.user.id) return res.status(403).json({ error: 'Only the requester can report a problem' });
-    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review') RETURNING id`, [reason, req.params.id, req.user.id]);
+    const result = await query(`UPDATE requests SET status = 'disputed', dispute_reason = $1, release_status = 'blocked' WHERE id = $2 AND requester_id = $3 AND status IN ('payment_proof_submitted','awaiting_confirmation','payment_received','under_admin_review') RETURNING id`, [reason, req.params.id, req.user.id]);
     if (!result.rows[0]) return res.status(409).json({ error: 'Request cannot be disputed in its current state' });
     await notifyAdminForRequest(req.params.id, `Requester reported a problem: ${reason}`);
     res.json({ status: 'disputed' });
@@ -430,7 +430,7 @@ app.get('/api/admin/requests', requireUser, requireAdmin, async (req, res, next)
 });
 app.get('/api/admin/requests/review', requireUser, requireAdmin, async (req, res, next) => {
   try{
-    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','confirmed','awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
+    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','payment_received','confirmed','awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
     const proofs = await query(`SELECT id, request_id, file_path, file_name, mime_type, file_size, status, created_at FROM payment_proofs WHERE status = 'submitted' ORDER BY created_at ASC`);
     res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)), proofs: proofs.rows });
   }catch(error){ next(error); }
@@ -514,7 +514,7 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
 });
 app.get('/api/admin/escrow-reviews', requireUser, requireAdmin, async (req, res, next) => {
   try {
-    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','awaiting_confirmation','under_admin_review','disputed','confirmed') ORDER BY r.created_at ASC`);
+    const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','payment_received','awaiting_confirmation','under_admin_review','disputed','confirmed') ORDER BY r.created_at ASC`);
     res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)) });
   } catch (error) { next(error); }
 });
@@ -629,7 +629,7 @@ async function initializeDatabase(){
   await db.query(`ALTER TABLE deposit_addresses DROP CONSTRAINT IF EXISTS deposit_addresses_asset_check`);
   await db.query(`ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS ledger_entries_asset_check`);
   await db.query(`ALTER TABLE withdrawals DROP CONSTRAINT IF EXISTS withdrawals_asset_check`);
-  await db.query(`ALTER TABLE requests ADD CONSTRAINT requests_escrow_asset_check CHECK (escrow_asset IN ('USDC','USDT','BTC')), ADD CONSTRAINT requests_status_check CHECK (status IN ('draft','awaiting_deposit','deposit_confirming','funded','open','accepted','payment_pending','payment_proof_submitted','confirmed','released','in_progress','awaiting_confirmation','under_admin_review','completed','disputed','cancelled'))`);
+  await db.query(`ALTER TABLE requests ADD CONSTRAINT requests_escrow_asset_check CHECK (escrow_asset IN ('USDC','USDT','BTC')), ADD CONSTRAINT requests_status_check CHECK (status IN ('draft','awaiting_deposit','deposit_confirming','funded','open','accepted','payment_pending','payment_proof_submitted','payment_received','confirmed','released','in_progress','awaiting_confirmation','under_admin_review','completed','disputed','cancelled'))`);
   await db.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
   await db.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('member','admin','super_admin'))`);
   await db.query(`UPDATE requests SET fee = ROUND((amount + reward) * 0.025, 2), total = amount + reward + ROUND((amount + reward) * 0.025, 2) WHERE fee <> ROUND((amount + reward) * 0.025, 2) OR total <> amount + reward + ROUND((amount + reward) * 0.025, 2)`);

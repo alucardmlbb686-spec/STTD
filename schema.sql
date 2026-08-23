@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS requests (
   required_confirmations INTEGER NOT NULL DEFAULT 3,
   confirmations INTEGER NOT NULL DEFAULT 0,
   deposit_status TEXT NOT NULL DEFAULT 'pending' CHECK (deposit_status IN ('pending', 'confirming', 'confirmed', 'rejected')),
-  status TEXT NOT NULL DEFAULT 'awaiting_deposit' CHECK (status IN ('draft', 'awaiting_deposit', 'deposit_confirming', 'funded', 'open', 'accepted', 'payment_pending', 'payment_proof_submitted', 'confirmed', 'released', 'in_progress', 'awaiting_confirmation', 'under_admin_review', 'completed', 'disputed', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'awaiting_deposit' CHECK (status IN ('draft', 'awaiting_deposit', 'deposit_confirming', 'funded', 'open', 'accepted', 'payment_pending', 'payment_proof_submitted', 'payment_received', 'confirmed', 'released', 'in_progress', 'awaiting_confirmation', 'under_admin_review', 'completed', 'disputed', 'cancelled')),
   proof_details TEXT,
   proof_submitted_at TIMESTAMPTZ,
   dispute_reason TEXT,

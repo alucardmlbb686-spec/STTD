@@ -6,7 +6,7 @@ function releaseConfigured(){
 
 function validateReleaseEligibility(request){
   if (!request) return { eligible: false, error: 'Request not found' };
-  if (!['confirmed', 'under_admin_review'].includes(request.status)) return { eligible: false, error: `Request is not ready for release. Current status: ${request.status}` };
+  if (!['payment_received', 'confirmed', 'under_admin_review'].includes(request.status)) return { eligible: false, error: `Requester confirmation is required before release. Current status: ${request.status}` };
   if (request.dispute_reason || request.status === 'disputed') return { eligible: false, error: 'Disputed requests cannot release funds' };
   if (request.release_status === 'released' || request.released_at || request.provider_transaction_id) return { eligible: false, error: 'Funds have already been released' };
   if (!request.fulfiller_id || !request.fulfiller_wallet || request.deposit_status !== 'confirmed' || !request.deposit_amount) return { eligible: false, error: 'Escrow or receiver wallet is not ready' };

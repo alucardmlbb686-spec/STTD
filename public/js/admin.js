@@ -171,7 +171,7 @@ document.addEventListener('partials:loaded', async () => {
     if (!pageBody || !title) return;
 
     if (name === 'payment-review') {
-      const reviewRequests = all.filter(request => ['payment_proof_submitted', 'awaiting_confirmation', 'under_admin_review', 'confirmed', 'disputed'].includes(request.status));
+      const reviewRequests = all.filter(request => ['payment_proof_submitted', 'awaiting_confirmation', 'payment_received', 'under_admin_review', 'confirmed', 'disputed'].includes(request.status));
       pageBody.innerHTML = `
         <div class="page-title-row"><div><h1>Payment Reviews</h1><div class="sub">Review payment proof and approve escrow release.</div></div></div>
         <div class="requests-grid">${reviewRequests.length ? reviewRequests.map(paymentReviewCard).join('') : '<div class="empty-state"><h3>No payment reviews</h3><p>Requests requiring admin attention will appear here.</p></div>'}</div>`;
@@ -243,7 +243,7 @@ document.addEventListener('partials:loaded', async () => {
         result = await SCStore.api(`/api/admin/deposits/${request.id}/confirm`, { method: 'POST', body: JSON.stringify({ confirmations: request.requiredConfirmations || 3 }) });
       } else if (['payment_proof_submitted','awaiting_confirmation'].includes(request.status)) {
         result = await SCStore.api(`/api/admin/requests/${request.id}/approve-proof`, { method: 'POST' });
-      } else if (['confirmed', 'under_admin_review'].includes(request.status)) {
+      } else if (['payment_received', 'confirmed', 'under_admin_review'].includes(request.status)) {
         if (!window.confirm(`Release escrow funds to ${request.fulfiller || 'the receiver'}?\n\nRequest: ${request.id}\nAmount: ${SC.fmtMoney(request.amount + request.reward)}\nAsset: ${request.escrowAsset}`)) return;
         result = await SCStore.api(`/api/admin/requests/${request.id}/release-funds`, { method: 'POST' });
       } else {
@@ -262,7 +262,7 @@ document.addEventListener('partials:loaded', async () => {
       <button class="btn btn-secondary btn-sm payment-review-action" data-id="${request.id}" data-action="reject-proof">Reject Proof</button>
       <button class="btn btn-secondary btn-sm payment-review-action" data-id="${request.id}" data-action="request-new-proof">Request New Proof</button>
       <button class="btn btn-danger btn-sm payment-review-action" data-id="${request.id}" data-action="dispute">Mark as Disputed</button>`;
-    const release = ['confirmed', 'under_admin_review'].includes(request.status) ? `<button class="btn btn-primary btn-sm payment-review-action" data-id="${request.id}" data-action="release-funds">Release Funds</button>` : '';
+    const release = ['payment_received', 'confirmed', 'under_admin_review'].includes(request.status) ? `<button class="btn btn-primary btn-sm payment-review-action" data-id="${request.id}" data-action="release-funds">Release Funds</button>` : '';
     return `<div class="card request-card"><div class="rc-top"><div><div class="cell-primary">${request.id}</div><div class="cell-muted">${request.requester} → ${request.fulfiller || 'Unassigned receiver'}</div></div>${SC.statusBadge(request.status)}</div><div class="kv-list"><div class="kv-row"><span class="k">Method</span><span class="v">${SC.methodMeta(request.method).label}</span></div><div class="kv-row"><span class="k">Amount</span><span class="v">${SC.fmtMoney(request.amount)}</span></div><div class="kv-row"><span class="k">Reward + fee</span><span class="v">${SC.fmtMoney(request.reward)} + ${SC.fmtMoney(request.fee)}</span></div><div class="kv-row"><span class="k">Escrow</span><span class="v">${request.escrowAsset} · ${request.depositStatus}</span></div><div class="kv-row"><span class="k">Proof</span><span class="v">${request.proof ? `<a href="${request.proof.url}" target="_blank" rel="noreferrer">View screenshot</a>` : 'Not submitted'}</span></div><div class="kv-row"><span class="k">Reference</span><span class="v">${request.proof?.transactionReference || '—'}</span></div><div class="kv-row"><span class="k">Note</span><span class="v">${request.proof?.note || '—'}</span></div></div><div class="table-actions" style="margin-top:18px; flex-wrap:wrap;">${action}${release}</div></div>`;
   }
 

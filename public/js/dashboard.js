@@ -78,7 +78,7 @@ document.addEventListener('partials:loaded', () => {
     const mine = await SCStore.getMine();
     const active = mine.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status));
     const accepted = mine.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
-    const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
+    const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','payment_received','under_admin_review','completed'].includes(r.status));
     const completed = mine.filter(r => r.status === 'completed');
     const totalReward = completed.reduce((s,r) => s + r.reward, 0);
 
@@ -137,7 +137,7 @@ document.addEventListener('partials:loaded', () => {
   function taskRowHtml(r){
     const meta = SC.methodMeta(r.method);
     const canConfirmPaid = ['accepted', 'payment_pending', 'in_progress'].includes(r.status);
-    const taskStatus = ['under_admin_review', 'completed'].includes(r.status) ? 'Task completed' : SC.statusBadge(r.status);
+    const taskStatus = ['payment_received', 'under_admin_review', 'completed'].includes(r.status) ? 'Task completed' : SC.statusBadge(r.status);
     return `
       <div class="request-row">
         <div class="req-icon">${SC.methodIcon(r.method)}</div>
@@ -177,7 +177,7 @@ document.addEventListener('partials:loaded', () => {
     const pageBody = document.querySelector('.page-body');
     if (section === 'tasks') {
       const mine = await SCStore.getMine();
-      const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
+      const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','payment_received','under_admin_review','completed'].includes(r.status));
       pageBody.innerHTML = `
         <div class="page-title-row"><div><h1>Tasks</h1><div class="sub">Requests from other users that you accepted.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-primary">Browse requests</a></div></div>
         <div class="card"><div class="panel-head"><h3>${tasks.length} accepted task${tasks.length === 1 ? '' : 's'}</h3><span class="pill-tag">Live</span></div>

@@ -22,12 +22,13 @@ document.addEventListener('partials:loaded', () => {
     const all = (await SCStore.getMine()).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     document.getElementById('cAll').textContent = all.length;
     document.getElementById('cOpen').textContent = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status)).length;
-    document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
+    document.getElementById('cAccepted').textContent = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','payment_received','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status)).length;
     document.getElementById('cCompleted').textContent = all.filter(r => r.status === 'completed').length;
     document.getElementById('cCancelled').textContent = all.filter(r => r.status === 'cancelled').length;
 
     let data = all;
     if (activeTab === 'open') data = all.filter(r => ['awaiting_deposit','deposit_confirming','funded','open'].includes(r.status));
+    else if (activeTab === 'accepted') data = all.filter(r => ['accepted','payment_pending','payment_proof_submitted','payment_received','confirmed','released','in_progress','awaiting_confirmation','under_admin_review'].includes(r.status));
     else if (activeTab !== 'all') data = all.filter(r => r.status === activeTab);
 
     if (!data.length){
@@ -47,7 +48,7 @@ document.addEventListener('partials:loaded', () => {
           <td class="mono text-green">+${SC.fmtMoney(r.reward)}</td>
           <td>${SC.statusBadge(r.status)}</td>
           <td class="cell-muted">${SC.timeAgo(r.createdAt)}</td>
-          <td><div class="table-actions"><button class="btn btn-secondary btn-sm chat-btn" data-id="${r.id}">Chat</button><button class="icon-btn view-btn" data-id="${r.id}" aria-label="View details">
+          <td><div class="table-actions">${requesterAction(r)}<button class="btn btn-secondary btn-sm chat-btn" data-id="${r.id}">Chat</button><button class="icon-btn view-btn" data-id="${r.id}" aria-label="View details">
             <svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M1.5 9S4.5 3.5 9 3.5 16.5 9 16.5 9 13.5 14.5 9 14.5 1.5 9 1.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="9" cy="9" r="2.3" stroke="currentColor" stroke-width="1.4"/></svg>
           </button></div></td>
         </tr>
@@ -55,7 +56,18 @@ document.addEventListener('partials:loaded', () => {
     }).join('');
 
     SC.qsa('.view-btn').forEach(btn => btn.addEventListener('click', () => openDetail(btn.dataset.id)));
+    SC.qsa('.review-proof-btn').forEach(btn => btn.addEventListener('click', () => openDetail(btn.dataset.id)));
     SC.qsa('.chat-btn').forEach(btn => btn.addEventListener('click', () => openChat(btn.dataset.id)));
+  }
+
+  function requesterAction(request){
+    if (request.requesterId !== user.id) return '';
+    if (request.status === 'accepted') return '<span class="cell-muted">Waiting for receiver to complete payment.</span>';
+    if (request.status === 'payment_proof_submitted') return `<button class="btn btn-primary btn-sm review-proof-btn" data-id="${request.id}">Review Payment Proof</button>`;
+    if (request.status === 'payment_received') return '<span class="cell-muted">Payment confirmed. Waiting for fund release.</span>';
+    if (['released', 'completed'].includes(request.status)) return '<span class="badge badge-completed">Transaction Completed</span>';
+    if (request.status === 'disputed') return '<span class="badge badge-failed">Transaction Under Review</span>';
+    return '';
   }
 
   const chatModal = document.getElementById('chatModal');
@@ -100,6 +112,7 @@ document.addEventListener('partials:loaded', () => {
   });
 
   const detailModal = document.getElementById('detailModal');
+  const disputeModal = document.getElementById('disputeModal');
   async function openDetail(id){
     const r = (await SCStore.getMine()).find(x => x.id === id);
     if (!r) return;
@@ -125,8 +138,9 @@ document.addEventListener('partials:loaded', () => {
     `;
     const cancelBtn = document.getElementById('detailCancelReq');
     cancelBtn.style.display = ['awaiting_deposit','deposit_confirming','open'].includes(r.status) ? 'inline-flex' : 'none';
-    document.getElementById('detailConfirmReq').style.display = r.status === 'payment_proof_submitted' || r.status === 'awaiting_confirmation' ? 'inline-flex' : 'none';
-    document.getElementById('detailDisputeReq').style.display = ['payment_proof_submitted','confirmed','awaiting_confirmation','under_admin_review'].includes(r.status) ? 'inline-flex' : 'none';
+    const isRequester = r.requesterId === user.id;
+    document.getElementById('detailConfirmReq').style.display = isRequester && ['payment_proof_submitted','awaiting_confirmation'].includes(r.status) ? 'inline-flex' : 'none';
+    document.getElementById('detailDisputeReq').style.display = isRequester && ['payment_proof_submitted','confirmed','awaiting_confirmation','payment_received','under_admin_review'].includes(r.status) ? 'inline-flex' : 'none';
     detailModal.classList.add('show');
   }
 
@@ -145,17 +159,31 @@ document.addEventListener('partials:loaded', () => {
   });
 
   document.getElementById('detailConfirmReq').addEventListener('click', async () => {
-    await SCStore.update(pendingCancelId, { status: 'under_admin_review' });
+    if (!window.confirm('Confirm that you have received the payment from the receiver?')) return;
+    await SCStore.update(pendingCancelId, { status: 'payment_received' });
     detailModal.classList.remove('show');
     SC.toast('Completion confirmed. An authorized admin will release escrow.', 'success');
     render();
   });
   document.getElementById('detailDisputeReq').addEventListener('click', async () => {
-    const reason = window.prompt('Why are you reporting a problem with this payment?');
-    if (!reason?.trim()) return;
-    await SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: reason.trim() } });
-    detailModal.classList.remove('show');
-    SC.toast('Issue reported for admin review.', 'success');
-    render();
+    document.getElementById('disputeReason').value = '';
+    document.getElementById('disputeDetails').value = '';
+    disputeModal.classList.add('show');
+  });
+  document.getElementById('disputeCancel').addEventListener('click', () => disputeModal.classList.remove('show'));
+  disputeModal.addEventListener('click', event => { if (event.target === disputeModal) disputeModal.classList.remove('show'); });
+  document.getElementById('disputeSubmit').addEventListener('click', async function(){
+    const reason = document.getElementById('disputeReason').value.trim();
+    const details = document.getElementById('disputeDetails').value.trim();
+    if (!reason) { SC.toast('Enter a problem reason first.', 'error'); return; }
+    SC.setLoading(this, true);
+    try {
+      await SCStore.update(pendingCancelId, { status: 'disputed', dispute: { reason: details ? `${reason}\n${details}` : reason } });
+      disputeModal.classList.remove('show');
+      detailModal.classList.remove('show');
+      SC.toast('A problem has been reported. Funds are locked for review.', 'success');
+      render();
+    } catch (error) { SC.toast(error.message, 'error'); }
+    finally { SC.setLoading(this, false); }
   });
 });

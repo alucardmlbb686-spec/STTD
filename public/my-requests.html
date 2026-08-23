@@ -63,7 +63,7 @@
     <div style="display:flex; gap:10px; margin-top:24px;">
       <button class="btn btn-secondary btn-block" id="detailClose">Close</button>
       <button class="btn btn-secondary btn-block" id="detailDisputeReq">Report a Problem</button>
-      <button class="btn btn-primary btn-block" id="detailConfirmReq">Confirm Payment Received</button>
+      <button class="btn btn-primary btn-block" id="detailConfirmReq">Yes, Payment Received</button>
       <button class="btn btn-danger btn-block" id="detailCancelReq">Cancel request</button>
     </div>
   </div>
@@ -84,6 +84,21 @@
       </div>
       <div class="hint" style="margin-top:7px;">Attach a PNG, JPG, JPEG, or WEBP screenshot up to 8 MB.</div>
     </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="disputeModal">
+  <div class="modal" style="width:460px;">
+    <h3 style="margin-bottom:10px;">Report a Problem</h3>
+    <p style="font-size:13.5px; margin-bottom:18px;">Tell us what went wrong with this payment.</p>
+    <label for="disputeReason">Problem reason</label>
+    <input class="input" id="disputeReason" maxlength="500" placeholder="Payment was not received" required>
+    <label for="disputeDetails" style="display:block; margin-top:12px;">Additional details <span class="text-faint">(optional)</span></label>
+    <textarea class="input" id="disputeDetails" rows="3" maxlength="1500" placeholder="Add any helpful details"></textarea>
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-secondary btn-block" id="disputeCancel">Cancel</button>
+      <button class="btn btn-danger btn-block" id="disputeSubmit">Submit Dispute <span class="spinner"></span></button>
+    </div>
   </div>
 </div>
 
