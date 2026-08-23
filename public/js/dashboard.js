@@ -16,7 +16,7 @@ document.addEventListener('partials:loaded', () => {
   });
 
   const requestedSection = new URLSearchParams(window.location.search).get('section');
-  if (requestedSection === 'wallet' || requestedSection === 'settings') {
+  if (requestedSection === 'wallet' || requestedSection === 'settings' || requestedSection === 'tasks') {
     document.querySelectorAll('.side-nav a[data-page]').forEach(link => {
       link.classList.toggle('active', link.dataset.page === requestedSection);
     });
@@ -27,6 +27,7 @@ document.addEventListener('partials:loaded', () => {
   // ---- Skeleton loading, then render ----
   const statsGrid = document.getElementById('statsGrid');
   const activeList = document.getElementById('activeList');
+  const taskList = document.getElementById('taskList');
   const acceptedList = document.getElementById('acceptedList');
   const activityList = document.getElementById('activityList');
 
@@ -34,6 +35,7 @@ document.addEventListener('partials:loaded', () => {
     <div class="card"><div class="skeleton" style="height:14px;width:60%;margin-bottom:14px;"></div><div class="skeleton" style="height:28px;width:80%;"></div></div>
   `).join('');
   activeList.innerHTML = skeletonRows(3);
+  taskList.innerHTML = skeletonRows(3);
   acceptedList.innerHTML = skeletonRows(3);
   activityList.innerHTML = skeletonRows(4);
 
@@ -50,6 +52,7 @@ document.addEventListener('partials:loaded', () => {
     const mine = await SCStore.getMine();
     const active = mine.filter(r => ['awaiting_deposit','deposit_confirming','open'].includes(r.status));
     const accepted = mine.filter(r => ['accepted','in_progress','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
+    const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
     const completed = mine.filter(r => r.status === 'completed');
     const totalReward = completed.reduce((s,r) => s + r.reward, 0);
 
@@ -65,6 +68,8 @@ document.addEventListener('partials:loaded', () => {
 
     acceptedList.innerHTML = accepted.length ? accepted.slice(0,4).map(rowHtml).join('') :
       emptyState('Nothing accepted yet', 'Once a peer accepts your request, it will show here.');
+    taskList.innerHTML = tasks.length ? tasks.slice(0,4).map(taskRowHtml).join('') :
+      emptyState('No tasks yet', 'Requests you accept from other users will appear here.');
 
     const activity = [...mine].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0,6);
     activityList.innerHTML = activity.map(r => `
@@ -77,6 +82,8 @@ document.addEventListener('partials:loaded', () => {
       </div>
     `).join('') || emptyState('No recent activity', 'Your request history will appear here.');
   }
+
+  window.setInterval(() => { if (!document.hidden) render(); }, 15000);
 
   function statusVerb(status){
     return { open: 'posted and awaiting a match', pending: 'pending confirmation', accepted: 'accepted by a peer',
@@ -94,6 +101,23 @@ document.addEventListener('partials:loaded', () => {
         </div>
         <div class="req-side">
           <div class="req-amt">${SC.fmtMoney(r.total)}</div>
+          ${SC.statusBadge(r.status)}
+        </div>
+      </div>
+    `;
+  }
+
+  function taskRowHtml(r){
+    const meta = SC.methodMeta(r.method);
+    return `
+      <div class="request-row">
+        <div class="req-icon">${SC.methodIcon(r.method)}</div>
+        <div class="req-main">
+          <div class="req-title">${r.id} · Send ${SC.fmtMoney(r.amount)} via ${meta.label}</div>
+          <div class="req-meta">For ${r.requester} · Due ${r.dueAt ? new Date(r.dueAt).toLocaleDateString() : 'not specified'}</div>
+        </div>
+        <div class="req-side">
+          <div class="req-amt">+${SC.fmtMoney(r.reward)}</div>
           ${SC.statusBadge(r.status)}
         </div>
       </div>
@@ -121,6 +145,16 @@ document.addEventListener('partials:loaded', () => {
 
   async function renderAccountSection(section, user){
     const pageBody = document.querySelector('.page-body');
+    if (section === 'tasks') {
+      const mine = await SCStore.getMine();
+      const tasks = mine.filter(r => r.fulfillerId === user.id && ['accepted','payment_pending','in_progress','payment_proof_submitted','awaiting_confirmation','under_admin_review','completed'].includes(r.status));
+      pageBody.innerHTML = `
+        <div class="page-title-row"><div><h1>Tasks</h1><div class="sub">Requests from other users that you accepted.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-primary">Browse requests</a></div></div>
+        <div class="card"><div class="panel-head"><h3>${tasks.length} accepted task${tasks.length === 1 ? '' : 's'}</h3><span class="pill-tag">Live</span></div>
+          ${tasks.length ? tasks.map(taskRowHtml).join('') : emptyState('No accepted tasks', 'Accept a request from Browse requests to start a task.')}
+        </div>`;
+      return;
+    }
     if (section === 'wallet') {
       const mine = await SCStore.getMine();
       const walletData = await SCStore.api('/api/wallet');

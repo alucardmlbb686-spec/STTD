@@ -87,7 +87,7 @@ function publicRequest(row, viewerId, viewerRole){
   const isFulfiller = viewerId === row.fulfiller_id;
     const canViewPrivate = isOwner || isFulfiller || ['admin', 'super_admin'].includes(viewerRole);
   return {
-    id: row.id, requester: row.requester_name, requesterId: row.requester_id, fulfiller: row.fulfiller_name,
+    id: row.id, requester: row.requester_name, requesterId: row.requester_id, fulfiller: row.fulfiller_name, fulfillerId: row.fulfiller_id,
     recipientName: row.recipient_name,
     recipient: canViewPrivate ? row.recipient_contact : 'Hidden until acceptance',
     method: row.method, amount: Number(row.amount), reward: Number(row.reward), fee: Number(row.fee), total: Number(row.total),
