@@ -356,6 +356,9 @@ table.data-table{ width:100%; min-width:620px; border-collapse: collapse; }
   box-shadow: var(--shadow-lg);
 }
 .modal-overlay.show .modal{ transform: translateY(0) scale(1); }
+.modal-actions{ display:flex; gap:10px; flex-wrap:wrap; }
+.modal-actions .btn{ flex:1 1 140px; min-width:0; }
+@media (max-width:520px){ .modal-actions .btn{ flex-basis:100%; } }
 
 .auth-required-overlay{ position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(5,8,7,.78); backdrop-filter:blur(8px); }
 .auth-protected:not(.auth-checked) .app-shell{ visibility:hidden; }
