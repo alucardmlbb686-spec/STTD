@@ -43,6 +43,24 @@ document.addEventListener('partials:loaded', () => {
 
   const requestedSection = new URLSearchParams(window.location.search).get('section');
   const withdrawModal = document.getElementById('withdrawModal');
+  const countryCurrencies = { US: ['USD', 'United States'], IN: ['INR', 'India'], GB: ['GBP', 'United Kingdom'], CA: ['CAD', 'Canada'], AU: ['AUD', 'Australia'], DE: ['EUR', 'Germany'], FR: ['EUR', 'France'], AE: ['AED', 'United Arab Emirates'], NG: ['NGN', 'Nigeria'], JP: ['JPY', 'Japan'] };
+  const currencyRates = { USD: 1, INR: 83.5, GBP: 0.79, CAD: 1.36, AUD: 1.53, EUR: 0.92, AED: 3.67, NGN: 1550, JPY: 149 };
+  const assetUsdRates = { USDC: 1, USDT: 1, BTC: 65000 };
+  const localeCountry = (navigator.language || 'en-US').split('-')[1]?.toUpperCase();
+  const countrySelect = document.getElementById('withdrawCountry');
+  countrySelect.innerHTML = Object.entries(countryCurrencies).map(([code, [, name]]) => `<option value="${code}">${name}</option>`).join('');
+  countrySelect.value = countryCurrencies[localeCountry] ? localeCountry : 'US';
+  function updateWithdrawalConversion(){
+    const currency = countryCurrencies[countrySelect.value][0];
+    const asset = document.getElementById('withdrawAsset').value;
+    const localAmount = Number(document.getElementById('withdrawLocalAmount').value);
+    const cryptoAmount = localAmount > 0 ? localAmount / currencyRates[currency] / assetUsdRates[asset] : 0;
+    document.getElementById('withdrawAmount').value = cryptoAmount ? cryptoAmount.toFixed(asset === 'BTC' ? 8 : 6) : '';
+    document.getElementById('withdrawRate').textContent = `1 ${asset} ≈ ${new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(currencyRates[currency] * assetUsdRates[asset])}`;
+  }
+  countrySelect.addEventListener('change', updateWithdrawalConversion);
+  document.getElementById('withdrawLocalAmount').addEventListener('input', updateWithdrawalConversion);
+  document.getElementById('withdrawAsset').addEventListener('change', updateWithdrawalConversion);
   document.getElementById('withdrawCancel').addEventListener('click', () => withdrawModal.classList.remove('show'));
   withdrawModal.addEventListener('click', event => { if (event.target === withdrawModal) withdrawModal.classList.remove('show'); });
   document.getElementById('withdrawSubmit').addEventListener('click', async function(){
@@ -228,7 +246,9 @@ document.addEventListener('partials:loaded', () => {
       document.getElementById('walletWithdraw').addEventListener('click', () => {
         if (!withdrawAsset.options.length) { SC.toast('No available funds to withdraw.', 'info'); return; }
         document.getElementById('withdrawAmount').value = '';
+        document.getElementById('withdrawLocalAmount').value = '';
         document.getElementById('withdrawAddress').value = '';
+        updateWithdrawalConversion();
         withdrawModal.classList.add('show');
       });
       return;

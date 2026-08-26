@@ -95,8 +95,13 @@
     <p style="font-size:13.5px; margin-bottom:18px;">Withdraw available earnings to your registered wallet address.</p>
     <label for="withdrawAsset">Asset</label>
     <select class="input" id="withdrawAsset" style="margin-bottom:12px;"></select>
+    <label for="withdrawCountry">Your country</label>
+    <select class="input" id="withdrawCountry" style="margin-bottom:12px;"></select>
+    <label for="withdrawLocalAmount">Amount in local currency</label>
+    <input class="input mono" id="withdrawLocalAmount" type="number" min="0" step="any" placeholder="0.00" style="margin-bottom:6px;">
+    <div class="hint" id="withdrawRate" style="margin-bottom:12px;"></div>
     <label for="withdrawAmount">Amount</label>
-    <input class="input mono" id="withdrawAmount" type="number" min="0" step="any" placeholder="0.00" style="margin-bottom:12px;">
+    <input class="input mono" id="withdrawAmount" type="number" min="0" step="any" placeholder="0.00" style="margin-bottom:12px;" readonly>
     <label for="withdrawAddress">Destination wallet address</label>
     <input class="input mono" id="withdrawAddress" maxlength="255" placeholder="Paste wallet address">
     <div style="display:flex; gap:10px; margin-top:20px;">
