@@ -80,7 +80,7 @@ const SC = (() => {
       payment_proof_submitted: { cls: 'badge-pending', label: 'Payment Proof Submitted' },
       payment_received: { cls: 'badge-completed', label: 'Completed' },
       confirmed: { cls: 'badge-pending', label: 'Confirmed' },
-      released: { cls: 'badge-completed', label: 'Released' },
+      released: { cls: 'badge-completed', label: 'Funds Released' },
       verification: { cls: 'badge-pending', label: 'Verification' },
       under_admin_review: { cls: 'badge-pending', label: 'Under Admin Review' },
       completed: { cls: 'badge-completed', label: 'Completed' },

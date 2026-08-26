@@ -566,10 +566,9 @@ app.post('/api/admin/requests/:id/review', requireUser, requireAdmin, async (req
     await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $6 IS NULL THEN NULL ELSE now() END)`, [row.id, row.fulfiller_id, row.escrow_asset, destination, releaseAmount, externalTransactionId, externalTransactionId ? 'confirmed' : 'pending']);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6)`, [row.requester_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, JSON.stringify({ releasedBy: req.user.id, settlementMode })]);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'withdrawal',$4,$5,$6,$7)`, [row.fulfiller_id, row.id, row.escrow_asset, releaseAmount, externalTransactionId, externalTransactionId ? 'completed' : 'pending', JSON.stringify({ destinationAddress: destination, settlementMode })]);
-    await client.query(`UPDATE requests SET status = 'completed' WHERE id = $1`, [req.params.id]);
-    await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'confirmed', 'released', $2),($1, 'released', 'completed', $2)`, [req.params.id, req.user.id]);
+    await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1, 'confirmed', 'released', $2)`, [req.params.id, req.user.id]);
     await client.query('COMMIT');
-    res.json({ status: 'completed', withdrawalStatus: externalTransactionId ? 'confirmed' : 'pending', settlementMode, externalTransactionId });
+    res.json({ status: 'released', withdrawalStatus: externalTransactionId ? 'confirmed' : 'pending', settlementMode, externalTransactionId });
   }catch(error){ await client.query('ROLLBACK'); next(error); } finally { client.release(); }
 });
 app.get('/api/admin/escrow-reviews', requireUser, requireAdmin, async (req, res, next) => {
