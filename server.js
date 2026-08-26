@@ -13,8 +13,9 @@ const escrow = require('./services/escrowService');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const PROOF_DIR = path.join(__dirname, 'uploads', 'proofs');
-const CHAT_DIR = path.join(__dirname, 'uploads', 'chat');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
+const PROOF_DIR = path.join(UPLOADS_DIR, 'proofs');
+const CHAT_DIR = path.join(UPLOADS_DIR, 'chat');
 const db = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -359,7 +360,7 @@ app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) =
     if (!proof || (req.user.id !== proof.requester_id && req.user.id !== proof.fulfiller_id && !['admin', 'super_admin'].includes(req.user.role))) return res.status(404).json({ error: 'Payment proof not found' });
     const filePath = path.join(PROOF_DIR, path.basename(proof.file_path));
     if (!fs.existsSync(filePath)) return res.status(410).json({ error: 'Payment proof file is no longer available. Please ask the receiver to upload the proof again.' });
-    res.type(path.extname(filePath)).sendFile(filePath);
+    res.type(path.extname(filePath)).set('Content-Disposition', 'inline').sendFile(filePath);
   }catch(error){ next(error); }
 });
 

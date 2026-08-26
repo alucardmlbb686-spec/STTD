@@ -32,6 +32,8 @@ services:
         value: sandbox
       - key: ESCROW_MODE
         value: sandbox
+      - key: UPLOADS_DIR
+        value: /opt/render/project/src/uploads
       - key: BLOCKCHAIN_WEBHOOK_SECRET
         sync: false
       - key: CDP_API_KEY_ID
