@@ -538,7 +538,7 @@ async function adminProofAction(req, res, next, action){
     if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
     let newStatus = request.status;
     if (action === 'approve-proof') {
-      if (!['payment_proof_submitted', 'under_admin_review', 'awaiting_confirmation'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No submitted proof is awaiting approval' }); }
+      if (!['payment_proof_submitted', 'payment_received', 'under_admin_review', 'awaiting_confirmation'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No submitted proof is awaiting approval' }); }
       await client.query(`UPDATE payment_proofs SET status = 'approved', reviewed_by = $1, reviewed_at = now() WHERE request_id = $2 AND status = 'submitted'`, [req.user.id, request.id]);
     } else if (action === 'reject-proof' || action === 'request-new-proof') {
       if (!['payment_proof_submitted', 'under_admin_review', 'awaiting_confirmation'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'No submitted proof is awaiting review' }); }
@@ -586,6 +586,27 @@ app.post('/api/admin/requests/:id/release-funds', requireUser, requireAdmin, asy
     await notify(request.requester_id, request.id, 'funds_released', 'Payment completed and escrow funds have been released.');
     await notify(request.fulfiller_id, request.id, 'funds_released', 'Funds have been released to your wallet.');
     res.json({ status: 'completed', providerTransactionId: release.providerTransactionId, transactionReference: release.providerTransactionId });
+  } catch (error) { await client.query('ROLLBACK').catch(() => {}); next(error); } finally { client.release(); }
+});
+
+app.post('/api/admin/requests/:id/refund-funds', requireUser, requireAdmin, async (req, res, next) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM requests WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const request = result.rows[0];
+    if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
+    const refund = await escrow.refundEscrowFunds(client, request, req.user.id);
+    const previousStatus = request.status;
+    await client.query(`UPDATE requests SET status = 'cancelled', release_status = 'refunded', escrow_status = 'refunded', released_at = now(), released_by = $1, provider_transaction_id = $2, completed_at = now() WHERE id = $3 AND release_status NOT IN ('released', 'refunded')`, [req.user.id, refund.providerTransactionId, request.id]);
+    const updated = await client.query('SELECT release_status FROM requests WHERE id = $1', [request.id]);
+    if (updated.rows[0].release_status !== 'refunded') throw Object.assign(new Error('Funds have already been released or refunded'), { statusCode: 409 });
+    await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0), available_balance = available_balance + $1 WHERE user_id = $2 AND asset = $3`, [request.deposit_amount, request.requester_id, request.escrow_asset]);
+    await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6),($1,$2,$3,'adjustment',$4,$5,'completed',$6)`, [request.requester_id, request.id, request.escrow_asset, request.deposit_amount, refund.providerTransactionId, JSON.stringify({ action: 'refund', refundedBy: req.user.id, simulated: refund.simulated })]);
+    await logAdminAction(client, req.user.id, request.id, 'refund-funds', previousStatus, 'cancelled', req.body.note);
+    await client.query('COMMIT');
+    await notify(request.requester_id, request.id, 'funds_refunded', 'Your escrow funds were refunded by an administrator.');
+    res.json({ status: 'cancelled', providerTransactionId: refund.providerTransactionId, transactionReference: refund.providerTransactionId });
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); next(error); } finally { client.release(); }
 });
 

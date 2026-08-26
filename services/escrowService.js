@@ -53,4 +53,39 @@ async function releaseEscrowFunds(client, request, adminId){
   return { providerTransactionId, amount: balance, asset: request.escrow_asset, adminId, simulated: true };
 }
 
-module.exports = { getEscrowBalance, getEscrowStatus, releaseEscrowFunds, validateReleaseEligibility };
+async function refundEscrowFunds(client, request, adminId){
+  if (!request) {
+    const error = new Error('Request not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!['disputed', 'payment_pending', 'payment_proof_submitted'].includes(request.status)) {
+    const error = new Error(`Request is not eligible for a refund. Current status: ${request.status}`);
+    error.statusCode = 409;
+    throw error;
+  }
+  if (request.release_status === 'released' || request.released_at || request.provider_transaction_id) {
+    const error = new Error('Funds have already been released');
+    error.statusCode = 409;
+    throw error;
+  }
+  if (request.deposit_status !== 'confirmed' || !request.deposit_amount) {
+    const error = new Error('No confirmed escrow deposit is available');
+    error.statusCode = 409;
+    throw error;
+  }
+  const balance = await getEscrowBalance(client, request);
+  if (balance <= 0) {
+    const error = new Error('No locked escrow balance is available');
+    error.statusCode = 409;
+    throw error;
+  }
+  if (!releaseConfigured()) {
+    const error = new Error('Escrow sandbox is not enabled');
+    error.statusCode = 503;
+    throw error;
+  }
+  return { providerTransactionId: `sandbox_refund_${crypto.randomUUID()}`, amount: balance, asset: request.escrow_asset, adminId, simulated: true };
+}
+
+module.exports = { getEscrowBalance, getEscrowStatus, releaseEscrowFunds, refundEscrowFunds, validateReleaseEligibility };
