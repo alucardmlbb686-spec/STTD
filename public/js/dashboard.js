@@ -189,9 +189,9 @@ document.addEventListener('partials:loaded', () => {
     if (section === 'wallet') {
       const mine = await SCStore.getMine();
       const walletData = await SCStore.api('/api/wallet');
-      const completed = mine.filter(request => request.status === 'completed');
-      const rewards = walletData.wallets.reduce((total, wallet) => total + Number(wallet.available_balance || 0), 0);
-      const pendingRewards = mine.filter(request => ['accepted', 'in_progress', 'awaiting_confirmation', 'under_admin_review'].includes(request.status)).reduce((total, request) => total + request.reward, 0);
+      const completed = mine.filter(request => request.fulfillerId === user.id && request.status === 'completed');
+      const rewards = completed.reduce((total, request) => total + Number(request.reward || 0), 0);
+      const pendingRewards = mine.filter(request => request.fulfillerId === user.id && ['accepted', 'payment_pending', 'in_progress', 'payment_proof_submitted', 'payment_received', 'awaiting_confirmation', 'under_admin_review'].includes(request.status)).reduce((total, request) => total + Number(request.reward || 0), 0);
       pageBody.innerHTML = `
         <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
         <div class="wallet-balance-card">
