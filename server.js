@@ -353,11 +353,12 @@ app.get('/api/requests/:id/chat/attachment/:messageId', requireUser, async (req,
 
 app.get('/api/requests/:id/payment-proof', requireUser, async (req, res, next) => {
   try{
+    res.set('Cache-Control', 'private, no-store');
     const result = await query(`SELECT pp.file_path, pp.file_name, r.requester_id, r.fulfiller_id FROM payment_proofs pp JOIN requests r ON r.id = pp.request_id WHERE pp.request_id = $1 ORDER BY pp.created_at DESC LIMIT 1`, [req.params.id]);
     const proof = result.rows[0];
     if (!proof || (req.user.id !== proof.requester_id && req.user.id !== proof.fulfiller_id && !['admin', 'super_admin'].includes(req.user.role))) return res.status(404).json({ error: 'Payment proof not found' });
     const filePath = path.join(PROOF_DIR, path.basename(proof.file_path));
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Payment proof file unavailable' });
+    if (!fs.existsSync(filePath)) return res.status(410).json({ error: 'Payment proof file is no longer available. Please ask the receiver to upload the proof again.' });
     res.type(path.extname(filePath)).sendFile(filePath);
   }catch(error){ next(error); }
 });
