@@ -661,6 +661,9 @@ async function initializeDatabase(){
   await db.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
   await db.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('member','admin','super_admin'))`);
   await db.query(`UPDATE requests SET fee = ROUND((amount + reward) * 0.025, 2), total = amount + reward + ROUND((amount + reward) * 0.025, 2) WHERE fee <> ROUND((amount + reward) * 0.025, 2) OR total <> amount + reward + ROUND((amount + reward) * 0.025, 2)`);
+  if (isSandbox()) {
+    await db.query(`UPDATE wallets w SET available_balance = COALESCE((SELECT SUM(r.reward) FROM requests r WHERE r.fulfiller_id = w.user_id AND r.escrow_asset = w.asset AND r.status = 'completed'), 0) WHERE w.asset IN ('USDC', 'USDT') AND EXISTS (SELECT 1 FROM requests r WHERE r.fulfiller_id = w.user_id AND r.escrow_asset = w.asset AND r.status = 'completed')`);
+  }
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD){
     const passwordHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
     await db.query(`INSERT INTO users (full_name, email, password_hash, role) VALUES ($1, lower($2), $3, 'admin') ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, password_hash = EXCLUDED.password_hash, role = 'admin'`, [process.env.ADMIN_NAME || 'Platform Administrator', process.env.ADMIN_EMAIL, passwordHash]);
