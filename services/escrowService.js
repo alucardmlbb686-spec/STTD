@@ -1,14 +1,14 @@
 const crypto = require('crypto');
 
-function releaseConfigured(){
-  return process.env.ESCROW_MODE === 'sandbox';
+function releaseConfigured(request){
+  return process.env.ESCROW_MODE === 'sandbox' || request?.escrow_mode === 'sandbox';
 }
 
 function validateReleaseEligibility(request){
   if (!request) return { eligible: false, error: 'Request not found' };
   if (!['payment_received', 'confirmed', 'under_admin_review'].includes(request.status)) return { eligible: false, error: `Requester confirmation is required before release. Current status: ${request.status}` };
   if (request.dispute_reason || request.status === 'disputed') return { eligible: false, error: 'Disputed requests cannot release funds' };
-  if (request.release_status === 'released' || request.released_at || request.provider_transaction_id) return { eligible: false, error: 'Funds have already been released' };
+  if (['released', 'refunded'].includes(request.release_status) || request.released_at || request.provider_transaction_id) return { eligible: false, error: 'Funds have already been released or refunded' };
   if (!request.fulfiller_id || !request.fulfiller_wallet || request.deposit_status !== 'confirmed' || !request.deposit_amount) return { eligible: false, error: 'Escrow or receiver wallet is not ready' };
   return { eligible: true };
 }
@@ -44,7 +44,7 @@ async function releaseEscrowFunds(client, request, adminId){
   }
   // Sandbox releases use the existing escrow ledger and a provider-shaped id.
   // A live custody adapter can replace this branch without changing the route contract.
-  if (!releaseConfigured()) {
+  if (!releaseConfigured(request)) {
     const error = new Error('Escrow sandbox is not enabled');
     error.statusCode = 503;
     throw error;

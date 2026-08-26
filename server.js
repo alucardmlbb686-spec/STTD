@@ -575,7 +575,7 @@ app.post('/api/admin/requests/:id/release-funds', requireUser, requireAdmin, asy
     if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
     const release = await escrow.releaseEscrowFunds(client, request, req.user.id);
     const previousStatus = request.status;
-    await client.query(`UPDATE requests SET status = 'released', release_status = 'released', escrow_status = 'released', released_at = now(), released_by = $1, provider_transaction_id = $2 WHERE id = $3 AND release_status <> 'released'`, [req.user.id, release.providerTransactionId, request.id]);
+    await client.query(`UPDATE requests SET status = 'released', release_status = 'released', escrow_status = 'released', released_at = now(), released_by = $1, provider_transaction_id = $2 WHERE id = $3 AND COALESCE(release_status, 'not_released') NOT IN ('released', 'refunded')`, [req.user.id, release.providerTransactionId, request.id]);
     const updated = await client.query('SELECT status FROM requests WHERE id = $1', [request.id]);
     if (updated.rows[0].status !== 'released') throw Object.assign(new Error('Funds have already been released'), { statusCode: 409 });
     const releaseAmount = assetAmount(request.escrow_asset, Number(request.amount) + Number(request.reward));
