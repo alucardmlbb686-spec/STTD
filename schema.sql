@@ -165,6 +165,20 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS wallet_withdrawals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  asset TEXT NOT NULL CHECK (asset IN ('USDC', 'USDT', 'BTC')),
+  destination_address TEXT NOT NULL,
+  amount NUMERIC(28,8) NOT NULL CHECK (amount > 0),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+  tx_hash TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS wallet_withdrawals_user_idx ON wallet_withdrawals (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,

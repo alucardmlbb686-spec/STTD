@@ -89,6 +89,23 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="withdrawModal">
+  <div class="modal" style="width:460px;">
+    <h3 style="margin-bottom:10px;">Withdraw funds</h3>
+    <p style="font-size:13.5px; margin-bottom:18px;">Withdraw available earnings to your registered wallet address.</p>
+    <label for="withdrawAsset">Asset</label>
+    <select class="input" id="withdrawAsset" style="margin-bottom:12px;"></select>
+    <label for="withdrawAmount">Amount</label>
+    <input class="input mono" id="withdrawAmount" type="number" min="0" step="any" placeholder="0.00" style="margin-bottom:12px;">
+    <label for="withdrawAddress">Destination wallet address</label>
+    <input class="input mono" id="withdrawAddress" maxlength="255" placeholder="Paste wallet address">
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-secondary btn-block" id="withdrawCancel">Cancel</button>
+      <button class="btn btn-primary btn-block" id="withdrawSubmit">Withdraw <span class="spinner"></span></button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/main.js"></script>
 <script src="/js/store.js"></script>
 <script src="/js/dashboard.js"></script>

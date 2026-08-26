@@ -42,6 +42,23 @@ document.addEventListener('partials:loaded', () => {
   });
 
   const requestedSection = new URLSearchParams(window.location.search).get('section');
+  const withdrawModal = document.getElementById('withdrawModal');
+  document.getElementById('withdrawCancel').addEventListener('click', () => withdrawModal.classList.remove('show'));
+  withdrawModal.addEventListener('click', event => { if (event.target === withdrawModal) withdrawModal.classList.remove('show'); });
+  document.getElementById('withdrawSubmit').addEventListener('click', async function(){
+    const asset = document.getElementById('withdrawAsset').value;
+    const amount = Number(document.getElementById('withdrawAmount').value);
+    const destinationAddress = document.getElementById('withdrawAddress').value.trim();
+    if (!asset || !Number.isFinite(amount) || amount <= 0 || !destinationAddress) { SC.toast('Enter an asset, amount, and destination address.', 'error'); return; }
+    SC.setLoading(this, true);
+    try {
+      await SCStore.api('/api/wallet/withdraw', { method: 'POST', body: JSON.stringify({ asset, amount, destinationAddress }) });
+      withdrawModal.classList.remove('show');
+      SC.toast('Withdrawal submitted successfully.', 'success');
+      await renderAccountSection('wallet', user);
+    } catch (error) { SC.toast(error.message, 'error'); }
+    finally { SC.setLoading(this, false); }
+  });
   if (requestedSection === 'wallet' || requestedSection === 'settings' || requestedSection === 'tasks') {
     document.querySelectorAll('.side-nav a[data-page]').forEach(link => {
       link.classList.toggle('active', link.dataset.page === requestedSection);
@@ -193,7 +210,7 @@ document.addEventListener('partials:loaded', () => {
       const rewards = completed.reduce((total, request) => total + Number(request.reward || 0), 0);
       const pendingRewards = mine.filter(request => request.fulfillerId === user.id && ['accepted', 'payment_pending', 'in_progress', 'payment_proof_submitted', 'payment_received', 'awaiting_confirmation', 'under_admin_review'].includes(request.status)).reduce((total, request) => total + Number(request.reward || 0), 0);
       pageBody.innerHTML = `
-        <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
+        <div class="wallet-header page-title-row"><div><h1>Wallet</h1><div class="sub">Your rewards, deposits, and transaction activity in one place.</div></div><div class="title-actions"><button class="btn btn-secondary" id="walletWithdraw">Withdraw</button><a href="/browse-requests.html" class="btn btn-secondary">Earn rewards</a><a href="/create-request.html" class="btn btn-primary">+ New request</a></div></div>
         <div class="wallet-balance-card">
           <div><div class="wallet-eyebrow">Available balance</div><div class="wallet-balance">${walletData.wallets.map(wallet => `${Number(wallet.available_balance).toFixed(wallet.asset === 'BTC' ? 8 : 2)} ${wallet.asset}`).join(' · ') || '0.00 USDT'}</div><div class="wallet-balance-note">Available after confirmed withdrawals</div></div>
           <div class="wallet-balance-side"><span class="wallet-status-dot"></span><span>Wallet active</span><div class="wallet-balance-mark">$</div></div>
@@ -206,6 +223,14 @@ document.addEventListener('partials:loaded', () => {
         <div class="card wallet-activity-card"><div class="panel-head"><div><h3>Wallet activity</h3><div class="wallet-panel-sub">Recent completed reward deposits</div></div><span class="pill-tag">${completed.length} completed</span></div>
           ${walletData.ledger.length ? `<div class="wallet-ledger">${walletData.ledger.slice(0,8).map(entry => `<div class="wallet-ledger-row"><div class="wallet-ledger-icon">${SC.methodIcon('crypto')}</div><div class="req-main"><div class="req-title">${entry.entry_type.replaceAll('_', ' ')}</div><div class="req-meta">${entry.asset} · ${entry.status} · ${SC.timeAgo(entry.created_at)}</div></div><div class="wallet-ledger-amount"><strong>${entry.entry_type === 'withdrawal' || entry.entry_type === 'escrow_lock' ? '-' : '+'}${entry.amount} ${entry.asset}</strong><span>${entry.confirmations || 0} confirmations</span></div></div>`).join('')}</div>` : '<div class="empty-state wallet-empty"><h3>No wallet activity yet</h3><p>Deposits, locked escrow, and withdrawals will appear here.</p><a href="/browse-requests.html" class="btn btn-secondary btn-sm">Browse requests</a></div>'}
         </div>`;
+      const withdrawAsset = document.getElementById('withdrawAsset');
+      withdrawAsset.innerHTML = walletData.wallets.filter(wallet => Number(wallet.available_balance) > 0).map(wallet => `<option value="${wallet.asset}">${wallet.asset} · ${Number(wallet.available_balance)}</option>`).join('');
+      document.getElementById('walletWithdraw').addEventListener('click', () => {
+        if (!withdrawAsset.options.length) { SC.toast('No available funds to withdraw.', 'info'); return; }
+        document.getElementById('withdrawAmount').value = '';
+        document.getElementById('withdrawAddress').value = '';
+        withdrawModal.classList.add('show');
+      });
       return;
     }
 

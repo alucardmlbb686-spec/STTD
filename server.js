@@ -182,7 +182,7 @@ async function logAdminAction(client, adminId, requestId, action, previousStatus
   await client.query('INSERT INTO admin_action_logs (admin_id, request_id, action, previous_status, new_status, note) VALUES ($1,$2,$3,$4,$5,$6)', [adminId, requestId, action, previousStatus, newStatus, note || null]);
 }
 
-app.use('/api/wallet', createWalletRouter({ requireUser, requireAdmin, query: (...args) => query(...args) }));
+app.use('/api/wallet', createWalletRouter({ requireUser, requireAdmin, query: (...args) => query(...args), db }));
 
 app.get('/api/requests', requireUser, async (req, res, next) => {
   try{
