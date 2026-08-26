@@ -208,15 +208,64 @@ app.post('/api/requests', requireUser, async (req, res, next) => {
       await client.query('BEGIN');
       result = await client.query(`INSERT INTO requests (requester_id, method, recipient_name, recipient_contact, amount, reward, fee, total, reason, due_at, note, escrow_asset, escrow_mode, cdp_account_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`, [req.user.id, method, recipientName.trim(), recipient.trim(), amountNumber, rewardNumber, fee, amountNumber + rewardNumber + fee, reason.trim(), dueAt, note?.trim() || null, escrowAsset, isSandbox() ? 'sandbox' : 'real', isSandbox() ? process.env.CDP_ACCOUNT_ID : null]);
       const id = result.rows[0].id;
-      const address = depositAddress(escrowAsset); const memo = depositMemo(id);
       const depositAmount = assetAmount(escrowAsset, amountNumber + rewardNumber + fee);
-      await client.query('UPDATE requests SET deposit_address = $1, deposit_memo = $2, deposit_amount = $3 WHERE id = $4', [address, memo, depositAmount, id]);
-      if (!isSandbox()) await client.query('INSERT INTO deposit_addresses (user_id, request_id, asset, address, memo) VALUES ($1,$2,$3,$4,$5)', [req.user.id, id, escrowAsset, address, memo]);
+      await client.query('UPDATE requests SET deposit_amount = $1 WHERE id = $2', [depositAmount, id]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
     const created = await query(`${requestSelect} WHERE r.id = $1`, [result.rows[0].id]);
-    res.status(201).json({ request: { ...publicRequest(created.rows[0], req.user.id), escrowMode: created.rows[0].escrow_mode, cdpAccountId: created.rows[0].cdp_account_id, depositAddress: created.rows[0].deposit_address, depositMemo: created.rows[0].deposit_memo, requiredConfirmations: created.rows[0].required_confirmations, confirmations: created.rows[0].confirmations, supportedAssets: isSandbox() ? sandboxAssets() : ['BTC', 'USDT'] } });
+    res.status(201).json({ request: { ...publicRequest(created.rows[0], req.user.id), escrowMode: created.rows[0].escrow_mode, cdpAccountId: created.rows[0].cdp_account_id, requiredConfirmations: created.rows[0].required_confirmations, confirmations: created.rows[0].confirmations, supportedAssets: isSandbox() ? sandboxAssets() : ['BTC', 'USDT'] } });
   }catch(error){ next(error); }
+});
+
+app.post('/api/requests/:id/fund', requireUser, async (req, res, next) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query('SELECT * FROM requests WHERE id = $1 AND requester_id = $2 FOR UPDATE', [req.params.id, req.user.id]);
+    const request = result.rows[0];
+    if (!request) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Request not found' }); }
+    if (!['awaiting_deposit', 'deposit_confirming'].includes(request.status)) { await client.query('ROLLBACK'); return res.status(409).json({ error: `Request cannot be funded in its current state: ${request.status}` }); }
+    const deposit = await escrow.createDepositForRequest(client, request);
+    if (request.escrow_mode === 'sandbox' && req.body.sandbox === true) {
+      if (deposit.status !== 'funds_held') {
+        const transactionId = `sandbox_cdp_${crypto.randomUUID()}`;
+        const confirmed = await escrow.confirmDeposit(client, deposit, transactionId, request.deposit_amount, request.required_confirmations);
+        await client.query(`UPDATE requests SET status = 'open', deposit_status = 'confirmed', confirmations = $1, cdp_transaction_id = $2, deposit_address = $3, deposit_memo = $4 WHERE id = $5`, [request.required_confirmations, transactionId, confirmed.deposit_address, `SC-${request.id.replaceAll('-', '').slice(0, 16).toUpperCase()}`, request.id]);
+        await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, amount, entry_type, status, confirmations, metadata) SELECT $1,$2,$3,$4,'deposit','confirmed',$5,$6 WHERE NOT EXISTS (SELECT 1 FROM ledger_entries WHERE request_id = $2 AND entry_type = 'deposit')`, [request.requester_id, request.id, request.escrow_asset, request.deposit_amount, request.required_confirmations, JSON.stringify({ mode: 'sandbox', provider: 'coinbase-cdp-sandbox', simulated: true, transactionId })]);
+        await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, amount, entry_type, status, confirmations, metadata) SELECT $1,$2,$3,$4,'escrow_lock','confirmed',$5,$6 WHERE NOT EXISTS (SELECT 1 FROM ledger_entries WHERE request_id = $2 AND entry_type = 'escrow_lock')`, [request.requester_id, request.id, request.escrow_asset, request.deposit_amount, request.required_confirmations, JSON.stringify({ mode: 'sandbox', simulated: true, transactionId })]);
+        await client.query(`INSERT INTO wallets (user_id, asset, locked_balance) VALUES ($1,$2,$3) ON CONFLICT (user_id, asset) DO UPDATE SET locked_balance = wallets.locked_balance + EXCLUDED.locked_balance`, [request.requester_id, request.escrow_asset, request.deposit_amount]);
+        await client.query(`INSERT INTO request_status_history (request_id, old_status, new_status, changed_by) VALUES ($1,'awaiting_deposit','open',$2) ON CONFLICT DO NOTHING`, [request.id, req.user.id]);
+      }
+      await client.query('COMMIT');
+      return res.json({ requestId: request.id, status: 'open', depositStatus: 'funds_held', simulated: true, deposit: await escrow.getDepositDetails(client, request.id) });
+    }
+    const transactionId = req.body.txHash?.trim();
+    if (transactionId) {
+      await client.query(`UPDATE escrow_deposits SET transaction_id = COALESCE(transaction_id, $1), transaction_status = 'confirming', status = 'confirming', updated_at = now() WHERE id = $2`, [transactionId, deposit.id]);
+      await client.query(`UPDATE requests SET escrow_tx_hash = COALESCE(escrow_tx_hash, $1), deposit_status = 'confirming', status = 'deposit_confirming', deposit_address = $2, deposit_memo = $3 WHERE id = $4`, [transactionId, deposit.deposit_address, `SC-${request.id.replaceAll('-', '').slice(0, 16).toUpperCase()}`, request.id]);
+      await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, amount, tx_hash, entry_type, status, metadata) SELECT $1,$2,$3,$4,$5,'deposit','pending',$6 WHERE NOT EXISTS (SELECT 1 FROM ledger_entries WHERE request_id = $2 AND entry_type = 'deposit')`, [request.requester_id, request.id, request.escrow_asset, request.deposit_amount, transactionId, JSON.stringify({ source: 'user-submitted', requiredConfirmations: request.required_confirmations })]);
+    }
+    await client.query('COMMIT');
+    res.json({ requestId: request.id, status: transactionId ? 'deposit_confirming' : 'awaiting_deposit', depositStatus: transactionId ? 'confirming' : deposit.status, deposit });
+  } catch (error) { await client.query('ROLLBACK'); next(error); } finally { client.release(); }
+});
+
+app.get('/api/requests/:id/deposit', requireUser, async (req, res, next) => {
+  try {
+    const result = await query(`SELECT r.* FROM requests r WHERE r.id = $1 AND r.requester_id = $2`, [req.params.id, req.user.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Request not found' });
+    const client = await db.connect();
+    try { res.json({ deposit: await escrow.getDepositDetails(client, req.params.id), requestId: req.params.id }); } finally { client.release(); }
+  } catch (error) { next(error); }
+});
+
+app.get('/api/requests/:id/deposit-status', requireUser, async (req, res, next) => {
+  try {
+    const result = await query('SELECT id FROM requests WHERE id = $1 AND requester_id = $2', [req.params.id, req.user.id]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Request not found' });
+    const client = await db.connect();
+    try { res.json({ requestId: req.params.id, deposit: await escrow.checkDepositStatus(client, req.params.id) }); } finally { client.release(); }
+  } catch (error) { next(error); }
 });
 
 app.post('/api/requests/:id/deposit', requireUser, async (req, res, next) => {
@@ -263,10 +312,12 @@ app.post('/api/webhooks/blockchain', async (req, res, next) => {
       if (amount !== undefined && Number(amount) < Number(row.deposit_amount)) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'Deposit amount is below the required escrow amount' }); }
       await client.query(`UPDATE ledger_entries SET confirmations = $1, status = CASE WHEN $1 >= $2 THEN 'confirmed' ELSE 'pending' END WHERE id = $3`, [count, required, row.ledger_id]);
       if (count >= required) {
+        await client.query(`UPDATE escrow_deposits SET received_amount = COALESCE($1, required_amount), confirmations = $2, transaction_status = 'funds_held', status = 'funds_held', updated_at = now() WHERE request_id = $3`, [amount, count, row.id]);
         await client.query(`UPDATE requests SET deposit_status = 'confirmed', status = 'open', confirmations = $1, deposit_amount = COALESCE(deposit_amount, $2) WHERE id = $3`, [count, amount || row.deposit_amount, row.id]);
         await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, status, confirmations, metadata) SELECT requester_id, id, escrow_asset, 'escrow_lock', COALESCE(deposit_amount, $1), 'confirmed', $2, '{"source":"blockchain-webhook"}' FROM requests WHERE id = $3 AND NOT EXISTS (SELECT 1 FROM ledger_entries WHERE request_id = $3 AND entry_type = 'escrow_lock')`, [amount || row.deposit_amount, count, row.id]);
         await client.query(`INSERT INTO wallets (user_id, asset, locked_balance) SELECT requester_id, escrow_asset, COALESCE(deposit_amount, $1) FROM requests WHERE id = $2 ON CONFLICT (user_id, asset) DO UPDATE SET locked_balance = wallets.locked_balance + EXCLUDED.locked_balance`, [amount || row.deposit_amount, row.id]);
       } else {
+        await client.query(`UPDATE escrow_deposits SET confirmations = $1, transaction_status = 'confirming', status = 'confirming', updated_at = now() WHERE request_id = $2`, [count, row.id]);
         await client.query(`UPDATE requests SET confirmations = $1 WHERE id = $2`, [count, row.id]);
       }
       await client.query('COMMIT');
@@ -430,6 +481,12 @@ app.post('/api/requests/:id/cancel', requireUser, async (req, res, next) => {
 app.get('/api/admin/requests', requireUser, requireAdmin, async (req, res, next) => {
   try{ const result = await query(`${requestSelect} ORDER BY r.created_at DESC`); res.json({ requests: result.rows.map(row => publicRequest(row, req.user.id, req.user.role)) }); }catch(error){ next(error); }
 });
+app.get('/api/admin/escrow', requireUser, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await query(`SELECT d.*, r.status AS request_status, r.total, requester.full_name AS requester_name FROM escrow_deposits d JOIN requests r ON r.id = d.request_id JOIN users requester ON requester.id = d.user_id ORDER BY d.updated_at DESC`);
+    res.json({ deposits: result.rows.map(row => ({ id: row.id, requestId: row.request_id, requester: row.requester_name, requiredAmount: Number(row.required_amount), receivedAmount: Number(row.received_amount), asset: row.asset, network: row.network, depositAddress: row.deposit_address, walletProvider: row.wallet_provider, providerAccountId: row.provider_account_id, transactionId: row.transaction_id, transactionStatus: row.transaction_status, confirmations: row.confirmations, status: row.status, requestStatus: row.request_status, createdAt: row.created_at, updatedAt: row.updated_at })) });
+  } catch (error) { next(error); }
+});
 app.get('/api/admin/requests/review', requireUser, requireAdmin, async (req, res, next) => {
   try{
     const result = await query(`${requestSelect} WHERE r.status IN ('payment_proof_submitted','payment_received','confirmed','awaiting_confirmation','under_admin_review','disputed') ORDER BY r.created_at ASC`);
@@ -470,6 +527,7 @@ app.post('/api/admin/deposits/:id/confirm', requireUser, requireAdmin, async (re
     const deposit = await client.query(`SELECT r.*, le.id AS ledger_id FROM requests r JOIN ledger_entries le ON le.request_id = r.id AND le.entry_type = 'deposit' WHERE r.id = $1 AND r.status = 'deposit_confirming' FOR UPDATE`, [req.params.id]);
     if (!deposit.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Deposit is not awaiting confirmation' }); }
     const row = deposit.rows[0]; const confirmations = Math.max(3, Number(req.body.confirmations || 3));
+    await client.query(`UPDATE escrow_deposits SET received_amount = required_amount, confirmations = $1, transaction_status = 'funds_held', status = 'funds_held', updated_at = now() WHERE request_id = $2`, [confirmations, row.id]);
     await client.query(`UPDATE requests SET deposit_status = 'confirmed', status = 'open', confirmations = $1 WHERE id = $2`, [confirmations, req.params.id]);
     await client.query(`UPDATE ledger_entries SET status = 'confirmed', confirmations = $1 WHERE id = $2`, [confirmations, row.ledger_id]);
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, status, confirmations, metadata) VALUES ($1,$2,$3,'escrow_lock',$4,'confirmed',$5,'{"source":"deposit-confirmation"}')`, [row.requester_id, row.id, row.escrow_asset, row.deposit_amount, confirmations]);
@@ -637,7 +695,7 @@ app.get('/health', async (req, res) => {
   if (!db) return res.json({ ok: true, database: 'not configured' });
   try {
     await db.query('SELECT 1');
-    const requiredTables = ['deposit_addresses', 'ledger_entries', 'payment_proofs', 'request_status_history', 'requests', 'sessions', 'users', 'wallets', 'withdrawals'];
+    const requiredTables = ['deposit_addresses', 'escrow_deposits', 'ledger_entries', 'payment_proofs', 'request_status_history', 'requests', 'sessions', 'users', 'wallets', 'withdrawals'];
     const tables = await db.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1::text[]) ORDER BY table_name`, [requiredTables]);
     const ready = requiredTables.every(table => tables.rows.some(row => row.table_name === table));
     res.status(ready ? 200 : 503).json({ ok: ready, database: 'connected', tables: tables.rows.map(row => row.table_name), message: ready ? 'schema ready' : 'schema incomplete' });

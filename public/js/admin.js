@@ -166,9 +166,16 @@ document.addEventListener('partials:loaded', async () => {
       requests: 'All requests',
       disputes: 'Disputes',
       transactions: 'Transactions',
+      escrow: 'Escrow',
       settings: 'Settings',
     }[name];
     if (!pageBody || !title) return;
+
+    if (name === 'escrow') {
+      const response = await SCStore.api('/api/admin/escrow');
+      pageBody.innerHTML = `<div class="page-title-row"><div><h1>Escrow</h1><div class="sub">Platform-controlled deposits and held funds.</div></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Request</th><th>Requester</th><th>Required</th><th>Received</th><th>Asset / Network</th><th>Deposit status</th><th>Request status</th><th>Reference</th></tr></thead><tbody>${response.deposits.length ? response.deposits.map(deposit => `<tr><td class="cell-primary">${deposit.requestId}</td><td>${deposit.requester}</td><td class="mono">${deposit.requiredAmount}</td><td class="mono">${deposit.receivedAmount}</td><td>${deposit.asset}<br><span class="cell-muted">${deposit.network}</span></td><td>${deposit.status === 'funds_held' ? '<span class="badge badge-completed">FUNDS HELD</span>' : SC.statusBadge(deposit.status)}</td><td>${SC.statusBadge(deposit.requestStatus)}</td><td class="mono cell-muted">${deposit.transactionId || deposit.providerAccountId || '—'}</td></tr>`).join('') : '<tr><td colspan="8" class="empty-state">No escrow deposits yet.</td></tr>'}</tbody></table></div>`;
+      return;
+    }
 
     if (name === 'payment-review') {
       const reviewRequests = all.filter(request => ['payment_proof_submitted', 'awaiting_confirmation', 'payment_received', 'under_admin_review', 'confirmed', 'disputed'].includes(request.status));

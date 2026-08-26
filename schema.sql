@@ -112,6 +112,28 @@ CREATE INDEX IF NOT EXISTS ledger_user_idx ON ledger_entries (user_id, created_a
 CREATE INDEX IF NOT EXISTS ledger_request_idx ON ledger_entries (request_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS deposit_addresses_lookup_idx ON deposit_addresses (address, memo, active);
 
+CREATE TABLE IF NOT EXISTS escrow_deposits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL UNIQUE REFERENCES requests(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deposit_address TEXT,
+  wallet_provider TEXT NOT NULL,
+  provider_account_id TEXT,
+  asset TEXT NOT NULL CHECK (asset IN ('USDC', 'USDT', 'BTC')),
+  network TEXT NOT NULL,
+  required_amount NUMERIC(28,8) NOT NULL CHECK (required_amount > 0),
+  received_amount NUMERIC(28,8) NOT NULL DEFAULT 0 CHECK (received_amount >= 0),
+  transaction_id TEXT UNIQUE,
+  transaction_status TEXT NOT NULL DEFAULT 'awaiting_deposit' CHECK (transaction_status IN ('awaiting_deposit', 'deposit_detected', 'confirming', 'funds_held', 'deposit_failed', 'expired', 'cancelled')),
+  confirmations INTEGER NOT NULL DEFAULT 0 CHECK (confirmations >= 0),
+  status TEXT NOT NULL DEFAULT 'awaiting_deposit' CHECK (status IN ('awaiting_deposit', 'deposit_detected', 'confirming', 'funds_held', 'deposit_failed', 'expired', 'cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS escrow_deposits_status_idx ON escrow_deposits (status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS escrow_deposits_user_idx ON escrow_deposits (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS payment_proofs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,

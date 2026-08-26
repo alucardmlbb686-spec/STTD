@@ -57,11 +57,13 @@ document.addEventListener('partials:loaded', () => {
     }).join('');
 
     SC.qsa('.view-btn').forEach(btn => btn.addEventListener('click', () => openDetail(btn.dataset.id)));
+    SC.qsa('.fund-btn').forEach(btn => btn.addEventListener('click', () => openFunding(btn.dataset.id)));
     SC.qsa('.review-proof-btn').forEach(btn => btn.addEventListener('click', () => openDetail(btn.dataset.id)));
   }
 
   function requesterAction(request){
     if (request.requesterId !== user.id) return '';
+    if (request.status === 'awaiting_deposit') return `<button class="btn btn-primary btn-sm fund-btn" data-id="${request.id}">Fund Request</button>`;
     if (request.status === 'accepted') return '<span class="cell-muted">Accepted · Waiting for payment</span>';
     if (request.status === 'payment_pending') return '<span class="cell-muted">Proof pending</span>';
     if (request.status === 'payment_proof_submitted' && (request.canReviewProof || request.requesterId === user.id)) return `<button class="btn btn-primary btn-sm review-proof-btn" data-id="${request.id}">Review Payment Proof</button>`;
@@ -69,6 +71,45 @@ document.addEventListener('partials:loaded', () => {
     if (['released', 'completed'].includes(request.status)) return '<span class="badge badge-completed">Transaction Completed</span>';
     if (request.status === 'disputed') return '<span class="badge badge-failed">Transaction Under Review</span>';
     return '';
+  }
+
+  async function openFunding(id){
+    const request = (await SCStore.getMine()).find(item => item.id === id);
+    if (!request) return;
+    const existing = document.getElementById('fundingModal');
+    existing?.remove();
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay show';
+    modal.id = 'fundingModal';
+    modal.innerHTML = `<div class="modal" style="width:460px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><h3>Fund Your Request</h3><span class="badge badge-pending">Awaiting Deposit</span></div>
+      <div class="kv-list"><div class="kv-row"><span class="k">Request ID</span><span class="v mono">${request.id}</span></div><div class="kv-row"><span class="k">Amount required</span><span class="v mono">${SC.fmtMoney(request.depositAmount || request.total)} ${request.escrowAsset || ''}</span></div><div class="kv-row"><span class="k">Network</span><span class="v" id="fundingNetwork">Loading...</span></div><div class="kv-row"><span class="k">Deposit address</span><span class="v mono" id="fundingAddress">Loading...</span></div></div>
+      <p class="hint" style="margin:18px 0;">Only send the exact supported asset and network to this destination. Sending an unsupported asset or network may result in loss of funds.</p>
+      <div class="field" id="fundingTxField" hidden><label for="fundingTxHash">Transaction ID</label><input class="input mono" id="fundingTxHash" placeholder="Paste transaction hash"></div>
+      <div class="modal-actions" style="margin-top:20px;"><button class="btn btn-secondary" id="fundingClose">Cancel</button><button class="btn btn-secondary" id="fundingCopy" disabled>Copy Address</button><button class="btn btn-primary" id="fundingSubmit">Fund with Test Balance</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('#fundingClose').addEventListener('click', close);
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    try {
+      const response = await SCStore.api(`/api/requests/${id}/fund`, { method: 'POST', body: JSON.stringify({}) });
+      const deposit = response.deposit;
+      const address = deposit?.deposit_address || deposit?.depositAddress;
+      modal.querySelector('#fundingNetwork').textContent = deposit?.network || 'Coinbase CDP Sandbox';
+      modal.querySelector('#fundingAddress').textContent = address || deposit?.provider_account_id || 'Sandbox test balance';
+      modal.querySelector('#fundingCopy').disabled = !address;
+      modal.querySelector('#fundingCopy').addEventListener('click', async () => { await navigator.clipboard.writeText(address); SC.toast('Deposit address copied.', 'success'); });
+      const sandbox = response.deposit?.wallet_provider === 'coinbase-cdp-sandbox' || request.escrowMode === 'sandbox';
+      if (!sandbox) { modal.querySelector('#fundingTxField').hidden = false; modal.querySelector('#fundingSubmit').textContent = 'Submit Transaction'; }
+      modal.querySelector('#fundingSubmit').addEventListener('click', async function(){
+        const txHash = modal.querySelector('#fundingTxHash')?.value.trim();
+        if (!sandbox && !txHash) { SC.toast('Enter the transaction ID first.', 'error'); return; }
+        SC.setLoading(this, true);
+        try { await SCStore.update(id, sandbox ? { sandboxFund: true } : { txHash }); close(); await render(); SC.toast(sandbox ? 'Funds held. Your request is now open.' : 'Deposit submitted and awaiting confirmations.', 'success'); }
+        catch (error) { SC.toast(error.message, 'error'); SC.setLoading(this, false); }
+      });
+    } catch (error) { modal.querySelector('#fundingAddress').textContent = error.message; modal.querySelector('#fundingSubmit').disabled = true; }
   }
 
   const detailModal = document.getElementById('detailModal');

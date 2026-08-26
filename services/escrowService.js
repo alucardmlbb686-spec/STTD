@@ -1,5 +1,45 @@
 const crypto = require('crypto');
 
+function platformDepositAddress(asset){
+  const variable = asset === 'BTC' ? 'ESCROW_BTC_ADDRESS' : 'ESCROW_USDT_ADDRESS';
+  const address = process.env[variable];
+  if (!address || address.startsWith('your-') || address.includes('PASTE_')) {
+    const error = new Error(`${variable} is required for real ${asset} deposits`);
+    error.statusCode = 503;
+    throw error;
+  }
+  return address;
+}
+
+async function createDepositForRequest(client, request){
+  const existing = await client.query('SELECT * FROM escrow_deposits WHERE request_id = $1', [request.id]);
+  if (existing.rows[0]) return existing.rows[0];
+  const sandbox = request.escrow_mode === 'sandbox';
+  const depositAddress = sandbox ? null : platformDepositAddress(request.escrow_asset);
+  const network = sandbox ? (process.env.CDP_NETWORK_ID || 'coinbase-cdp-sandbox') : (process.env.ESCROW_NETWORK || 'configured-platform-network');
+  const provider = sandbox ? 'coinbase-cdp-sandbox' : 'platform-escrow-address';
+  const result = await client.query(`INSERT INTO escrow_deposits (request_id, user_id, deposit_address, wallet_provider, provider_account_id, asset, network, required_amount) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (request_id) DO UPDATE SET updated_at = now() RETURNING *`, [request.id, request.requester_id, depositAddress, provider, request.cdp_account_id || null, request.escrow_asset, network, request.deposit_amount]);
+  return result.rows[0];
+}
+
+async function getDepositDetails(client, requestId){
+  const result = await client.query('SELECT * FROM escrow_deposits WHERE request_id = $1', [requestId]);
+  return result.rows[0] || null;
+}
+
+async function checkDepositStatus(client, requestId){
+  return getDepositDetails(client, requestId);
+}
+
+async function markFundsHeld(client, deposit, transactionId, receivedAmount, confirmations){
+  const result = await client.query(`UPDATE escrow_deposits SET transaction_id = COALESCE(transaction_id, $1), received_amount = $2, confirmations = $3, transaction_status = 'funds_held', status = 'funds_held', updated_at = now() WHERE id = $4 AND status <> 'funds_held' RETURNING *`, [transactionId, receivedAmount, confirmations, deposit.id]);
+  return result.rows[0] || (await getDepositDetails(client, deposit.request_id));
+}
+
+async function confirmDeposit(client, deposit, transactionId, receivedAmount, confirmations){
+  return markFundsHeld(client, deposit, transactionId, receivedAmount, confirmations);
+}
+
 function releaseConfigured(request){
   return process.env.ESCROW_MODE === 'sandbox' || request?.escrow_mode === 'sandbox';
 }
@@ -88,4 +128,4 @@ async function refundEscrowFunds(client, request, adminId){
   return { providerTransactionId: `sandbox_refund_${crypto.randomUUID()}`, amount: balance, asset: request.escrow_asset, adminId, simulated: true };
 }
 
-module.exports = { getEscrowBalance, getEscrowStatus, releaseEscrowFunds, refundEscrowFunds, validateReleaseEligibility };
+module.exports = { createDepositForRequest, getDepositDetails, checkDepositStatus, confirmDeposit, markFundsHeld, getEscrowBalance, getEscrowStatus, releaseEscrowFunds, refundEscrowFunds, validateReleaseEligibility };
