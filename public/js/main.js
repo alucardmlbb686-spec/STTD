@@ -162,6 +162,54 @@ const SC = (() => {
     document.body.appendChild(overlay);
   }
 
+  function showLogoutConfirmation(){
+    if (qs('#logoutConfirmOverlay')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'logoutConfirmOverlay';
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle">
+        <div class="eyebrow"><span class="dot"></span> Account</div>
+        <h2 id="logoutConfirmTitle">Are you sure you want to log out?</h2>
+        <p class="muted">You will need to log in again to access your dashboard and requests.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="logoutConfirmCancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="logoutConfirmSubmit">Log out</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+
+    const close = () => {
+      overlay.classList.remove('show');
+      setTimeout(() => overlay.remove(), 180);
+    };
+    overlay.querySelector('#logoutConfirmCancel').addEventListener('click', close);
+    overlay.addEventListener('click', event => { if (event.target === overlay) close(); });
+    document.addEventListener('keydown', function handleEscape(event){
+      if (event.key !== 'Escape') return;
+      document.removeEventListener('keydown', handleEscape);
+      close();
+    });
+    overlay.querySelector('#logoutConfirmSubmit').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      SC.setLoading(button, true);
+      await SCStore.clearUser();
+      window.location.href = '/';
+    });
+    overlay.querySelector('#logoutConfirmCancel').focus();
+  }
+
+  function initLogoutConfirmation(){
+    document.addEventListener('click', event => {
+      const logoutTrigger = event.target.closest('.sidebar-footer .user-chip');
+      if (!logoutTrigger) return;
+      event.preventDefault();
+      event.stopPropagation();
+      showLogoutConfirmation();
+    }, true);
+  }
+
   function initMobileNav(){
     const toggle = qs('#navToggle');
     const menu = qs('#mobileMenu');
@@ -210,6 +258,7 @@ const SC = (() => {
   document.addEventListener('DOMContentLoaded', async () => {
     await includePartials();
     initMobileNav();
+    initLogoutConfirmation();
     markActiveNav();
   });
 
