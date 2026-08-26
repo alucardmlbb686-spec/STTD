@@ -581,11 +581,13 @@ app.post('/api/admin/requests/:id/release-funds', requireUser, requireAdmin, asy
     const releaseAmount = assetAmount(request.escrow_asset, Number(request.amount) + Number(request.reward));
     await client.query(`UPDATE wallets SET locked_balance = GREATEST(locked_balance - $1, 0) WHERE user_id = $2 AND asset = $3`, [request.deposit_amount, request.requester_id, request.escrow_asset]);
     await client.query(`INSERT INTO withdrawals (request_id, user_id, asset, destination_address, amount, tx_hash, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7 = 'confirmed' THEN now() ELSE NULL END) ON CONFLICT (request_id) DO NOTHING`, [request.id, request.fulfiller_id, request.escrow_asset, request.fulfiller_wallet, releaseAmount, release.providerTransactionId, release.simulated ? 'confirmed' : 'pending']);
-    if (release.simulated) {
-      await client.query(`INSERT INTO wallets (user_id, asset, available_balance) VALUES ($1,$2,$3) ON CONFLICT (user_id, asset) DO UPDATE SET available_balance = wallets.available_balance + EXCLUDED.available_balance`, [request.fulfiller_id, request.escrow_asset, releaseAmount]);
-    }
     await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'escrow_release',$4,$5,'completed',$6),($7,$2,$3,'withdrawal',$4,$5,'completed',$6)`, [request.requester_id, request.id, request.escrow_asset, releaseAmount, release.providerTransactionId, JSON.stringify({ releasedBy: req.user.id, simulated: release.simulated }), request.fulfiller_id]);
     await client.query(`UPDATE requests SET status = 'completed', completed_at = now() WHERE id = $1 AND status = 'released'`, [request.id]);
+    if (release.simulated) {
+      const earnedAmount = assetAmount(request.escrow_asset, Number(request.reward));
+      await client.query(`INSERT INTO wallets (user_id, asset, available_balance) VALUES ($1,$2,$3) ON CONFLICT (user_id, asset) DO UPDATE SET available_balance = wallets.available_balance + EXCLUDED.available_balance`, [request.fulfiller_id, request.escrow_asset, earnedAmount]);
+      await client.query(`INSERT INTO ledger_entries (user_id, request_id, asset, entry_type, amount, tx_hash, status, metadata) VALUES ($1,$2,$3,'adjustment',$4,$5,'completed',$6)`, [request.fulfiller_id, request.id, request.escrow_asset, earnedAmount, release.providerTransactionId, JSON.stringify({ action: 'reward_earned', releasedBy: req.user.id, simulated: true })]);
+    }
     await logAdminAction(client, req.user.id, request.id, 'release-funds', previousStatus, 'completed', req.body.note);
     await client.query('COMMIT');
     await notify(request.requester_id, request.id, 'funds_released', 'Payment completed and escrow funds have been released.');
