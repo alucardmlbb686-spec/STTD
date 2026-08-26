@@ -125,9 +125,9 @@ const SC = (() => {
         console.error('Failed to load partial', name, e);
       }
     }));
+    if (typeof SCStore !== 'undefined') await SCStore.refreshSession();
     updateNavbarAuth();
     const protectedPage = ['dashboard', 'browse', 'create', 'my-requests'].includes(document.body.dataset.page);
-    if (protectedPage && typeof SCStore !== 'undefined') await SCStore.refreshSession();
     if (protectedPage) {
       const loggedIn = typeof SCStore !== 'undefined' && SCStore.isLoggedIn();
       document.body.classList.add(loggedIn ? 'auth-checked' : 'auth-denied');
