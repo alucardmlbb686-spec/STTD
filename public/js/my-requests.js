@@ -62,9 +62,9 @@ document.addEventListener('partials:loaded', () => {
   }
 
   function requesterAction(request){
-    if (request.requesterId !== user.id) return '';
+    if (!request.canReviewProof && request.requesterId !== user.id) return '';
     if (request.status === 'accepted') return '<span class="cell-muted">Waiting for receiver to complete payment.</span>';
-    if (request.status === 'payment_proof_submitted') return `<button class="btn btn-primary btn-sm review-proof-btn" data-id="${request.id}">Review Payment Proof</button>`;
+    if (request.status === 'payment_proof_submitted' && (request.canReviewProof || request.requesterId === user.id)) return `<button class="btn btn-primary btn-sm review-proof-btn" data-id="${request.id}">Review Payment Proof</button>`;
     if (request.status === 'payment_received') return '<span class="badge badge-completed">Transaction Completed</span>';
     if (['released', 'completed'].includes(request.status)) return '<span class="badge badge-completed">Transaction Completed</span>';
     if (request.status === 'disputed') return '<span class="badge badge-failed">Transaction Under Review</span>';

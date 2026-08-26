@@ -97,7 +97,7 @@ function publicRequest(row, viewerId, viewerRole){
     depositAddress: canViewPrivate ? row.deposit_address : undefined, depositMemo: canViewPrivate ? row.deposit_memo : undefined, depositAmount: canViewPrivate ? Number(row.deposit_amount || 0) : undefined,
     requiredConfirmations: row.required_confirmations, confirmations: row.confirmations,
     depositStatus: row.deposit_status, status: row.status, proof: (row.proof_details || row.proof_file_path) ? { details: row.proof_details, fileName: row.proof_file_name, transactionReference: row.proof_transaction_reference, note: row.proof_note, status: row.proof_status, submittedAt: row.proof_submitted_at, url: `/api/requests/${row.id}/payment-proof` } : null,
-    escrowStatus: row.escrow_status, releaseStatus: row.release_status, providerTransactionId: canViewPrivate ? row.provider_transaction_id : undefined, releasedAt: canViewPrivate ? row.released_at : undefined, fulfillerWallet: canViewPrivate ? row.fulfiller_wallet : undefined,
+    canReviewProof: isOwner && row.status === 'payment_proof_submitted', escrowStatus: row.escrow_status, releaseStatus: row.release_status, providerTransactionId: canViewPrivate ? row.provider_transaction_id : undefined, releasedAt: canViewPrivate ? row.released_at : undefined, fulfillerWallet: canViewPrivate ? row.fulfiller_wallet : undefined,
     dispute: row.dispute_reason ? { reason: row.dispute_reason } : null, reputation: row.requester_completed_requests, completedRequests: row.requester_completed_requests,
     createdAt: row.created_at, mine: row.requester_id === viewerId,
   };
